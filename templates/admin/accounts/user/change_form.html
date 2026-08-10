@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+  {% if original and perms.accounts.reset_user_password %}
+    <li>
+      <a href="{% url 'admin:accounts_user_reset_temporary_password' original.pk %}">生成一次性临时密码</a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

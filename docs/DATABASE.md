@@ -84,7 +84,7 @@ OR
 (account_status != ACTIVE AND is_active = false)
 ```
 
-账号状态、临时密码重置和角色分配只能通过统一账号服务更新。V1 预定义 `LAB_MEMBER`、`REIMBURSEMENT_ADMIN`、`SYSTEM_ADMIN` 三个 Group；角色定义通过 data migration 管理，不开放任意 Permission 编辑。
+账号状态、临时密码重置和角色分配只能通过统一账号服务更新。V1 预定义 `LAB_MEMBER`、`REIMBURSEMENT_ADMIN`、`SYSTEM_ADMIN` 三个 Group；角色定义通过受版本控制的 `post_migrate` 初始化器管理，不开放任意 Permission 编辑。
 
 ### 4.2 `accounts_userprofile`
 

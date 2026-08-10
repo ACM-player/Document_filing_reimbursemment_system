@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}登录 · LabArchive{% endblock %}
+
+{% block content %}
+  <section class="card auth-card">
+    <p class="eyebrow">课题组内部系统</p>
+    <h1>登录 LabArchive</h1>
+    <p>账号由系统管理员创建，不开放公开注册。</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if request.GET.next %}<input type="hidden" name="next" value="{{ request.GET.next }}">{% endif %}
+      {{ form.as_p }}
+      <button type="submit">登录</button>
+    </form>
+  </section>
+{% endblock %}

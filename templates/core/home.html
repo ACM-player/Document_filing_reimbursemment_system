@@ -1,14 +1,16 @@
-<!doctype html>
-<html lang="zh-Hans">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>LabArchive</title>
-  </head>
-  <body>
-    <main>
-      <h1>LabArchive</h1>
-      <p>Phase 0 工程基础已启动，业务页面尚未实现。</p>
-    </main>
-  </body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}首页 · LabArchive{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">Phase 1</p>
+    <h1>欢迎，{{ request.user.display_name|default:request.user.username }}</h1>
+    <p>账号与认证基础已经启用。项目、档案和报销页面将在后续阶段接入。</p>
+    <dl class="summary-list">
+      <div><dt>账号状态</dt><dd>{{ request.user.get_account_status_display }}</dd></div>
+      <div><dt>用户名</dt><dd>{{ request.user.username }}</dd></div>
+      <div><dt>最近登录</dt><dd>{{ request.user.last_login|default:"首次登录" }}</dd></div>
+    </dl>
+  </section>
+{% endblock %}
