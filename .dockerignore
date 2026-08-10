@@ -1,0 +1,10 @@
+.git
+.env
+.local
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+media
+staticfiles
+htmlcov
