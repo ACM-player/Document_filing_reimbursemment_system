@@ -111,6 +111,7 @@ media/                本地上传目录，仅提交占位文件
 scripts/              备份与维护脚本
 tests/                跨 App 测试
 Line.md               总体需求与开发计划
+taskline.md           已完成工作、验证证据、待办和下一步的本地进度记录
 compose.yaml          本地 Docker Compose
 ```
 
