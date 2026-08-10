@@ -1,0 +1,9 @@
+name: labarchive
+channels:
+  - defaults
+dependencies:
+  - python=3.13
+  - pip
+  - postgresql=17.10
+  - pip:
+      - -e .[dev]
