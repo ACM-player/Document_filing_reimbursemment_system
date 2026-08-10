@@ -23,6 +23,7 @@
 erDiagram
     USER ||--o| USER_PROFILE : has
     USER ||--o{ PROJECT_MEMBERSHIP : joins
+    USER ||--o{ PROJECT_ACCESS_REQUEST : requests
     USER ||--o{ PROJECT : creates
     USER ||--o{ FILE_ASSET : uploads
     USER ||--o{ EXPENSE : owns
@@ -31,6 +32,7 @@ erDiagram
 
     PROJECT_TYPE ||--o{ PROJECT : classifies
     PROJECT ||--o{ PROJECT_MEMBERSHIP : contains
+    PROJECT ||--o{ PROJECT_ACCESS_REQUEST : receives
     PROJECT ||--o{ DOCUMENT : owns
     PROJECT ||--o{ EXPENSE : funds
 
@@ -64,13 +66,25 @@ erDiagram
 | `username` | varchar | 唯一，登录标识 |
 | `display_name` | varchar | 可空显示名，不作为关联键 |
 | `email` | varchar | 可空；V1 不强制唯一 |
-| `is_active` | bool | 禁用/离组后为 false |
+| `account_status` | varchar | ACTIVE、DISABLED、DEPARTED、ARCHIVED |
+| `must_change_password` | bool | 临时密码首次登录门禁 |
+| `is_active` | bool | 仅 ACTIVE 时为 true |
 | `is_staff` | bool | 仅表示后台访问资格，不等于全部业务权限 |
 | `date_joined` | timestamptz | Django 字段 |
 | `created_at` | timestamptz | 创建时间 |
 | `updated_at` | timestamptz | 修改时间 |
 
 系统级角色使用 Django `Group` 和 `Permission`，不复制一套同名权限表。
+
+检查约束保证：
+
+```text
+(account_status = ACTIVE AND is_active = true)
+OR
+(account_status != ACTIVE AND is_active = false)
+```
+
+账号状态、临时密码重置和角色分配只能通过统一账号服务更新。V1 预定义 `LAB_MEMBER`、`REIMBURSEMENT_ADMIN`、`SYSTEM_ADMIN` 三个 Group；角色定义通过 data migration 管理，不开放任意 Permission 编辑。
 
 ### 4.2 `accounts_userprofile`
 
@@ -98,6 +112,7 @@ erDiagram
 | `name` / `short_name` | varchar | `short_name` 可空 |
 | `project_type_id` | FK | `PROTECT` |
 | `status` | varchar | 受枚举/检查约束 |
+| `visibility` | varchar | INTERNAL、RESTRICTED；默认 INTERNAL |
 | `principal_investigator_id` | User FK | `PROTECT` |
 | `start_date` / `end_date` | date | 可空；结束日期不得早于开始日期 |
 | `description` | text | 可空 |
@@ -114,8 +129,26 @@ erDiagram
 | `user_id` | FK | `PROTECT` |
 | `role` | varchar | PI、MANAGER、MEMBER、VIEWER |
 | `joined_at` / `left_at` | timestamptz | 成员生命周期 |
+| `access_source` | varchar | DIRECT、APPROVED_REQUEST |
+| `expires_at` | timestamptz | 访问申请产生的临时成员可空到期时间 |
 
-约束：同一项目同一用户只能有一条活动成员记录。V1 默认由角色决定权限；如增加成员例外字段，必须使用可空 Boolean 表达“继承/允许/拒绝”。
+约束：同一项目同一用户只能有一条活动成员记录。到期或离组成员不再提供访问权限。V1 不增加成员例外 Boolean；如未来增加，必须明确表达“继承/允许/拒绝”。
+
+### 5.4 `projects_projectaccessrequest`
+
+| 字段 | 类型 | 规则 |
+| --- | --- | --- |
+| `id` | UUID | 主键 |
+| `project_id` | Project FK | `PROTECT`，仅 RESTRICTED 项目需要申请 |
+| `requester_id` | User FK | `PROTECT`，提交时必须 ACTIVE |
+| `reason` | text | 必填，说明整理或汇总用途 |
+| `status` | varchar | PENDING、APPROVED、REJECTED、CANCELLED、EXPIRED |
+| `reviewed_by_id` | User FK | 可空、`PROTECT` |
+| `review_note` | text | 可空；拒绝时必填 |
+| `requested_at` / `reviewed_at` | timestamptz | 状态时间 |
+| `expires_at` | timestamptz | 可空；批准后可限制期限 |
+
+PostgreSQL 条件唯一约束：同一用户对同一项目在 `status=PENDING` 时最多一条申请。批准必须在同一事务中创建或更新 `VIEWER` ProjectMembership，并写入审计，但不得降低已有 PI、MANAGER 或 MEMBER 角色；撤销、到期和用户离组后该申请产生的访问失效。
 
 ## 6. 文件资产和项目文档
 

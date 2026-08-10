@@ -14,7 +14,7 @@
 | 数据页校验和 | 通过 | `pg_checksums --check`：0 个错误，版本 1 |
 | 自定义用户 | 通过 | `accounts.User` 使用 UUID 主键，进入首次 migration |
 | 核心 Apps | 通过 | accounts、core、projects、documents、expenses、todos、audit |
-| 架构文档 | 通过 | `docs/ARCHITECTURE.md` 与 2 个 ADR |
+| 架构文档 | 通过 | `docs/ARCHITECTURE.md` 与 3 个 ADR |
 | 数据库设计 | 通过 | `docs/DATABASE.md` 与初版 Mermaid ER 图 |
 | 环境变量 | 通过 | `.env.example` 已提交，`.env` 被 Git 忽略 |
 | 质量工具 | 通过 | pytest、pytest-django、coverage、Ruff |
@@ -94,9 +94,11 @@ GET / -> 200
 - 本地 PostgreSQL 数据目录：`.local/postgres`；
 - 本地媒体目录：`media`；
 - 回收站：暂定 90 天，V1 不自动物理删除；
-- 用户账号：暂定由管理员创建，不开放公开注册。
+- 用户账号：已确认由管理员创建，不开放公开注册；
+- 项目可见性：已确认 `INTERNAL` 默认内部只读，`RESTRICTED` 通过成员身份或访问申请授权；
+- 报销隐私：已确认项目负责人和项目管理员只能查看其他成员的报销概要，不能查看其报销附件。
 
-这些默认值不是最终业务确认。进入相应 Phase 前必须重新讨论。
+标记为“暂定”的默认值仍需在对应 Phase 前重新讨论；标记为“已确认”的规则进入当前架构基线。
 
 ## 5. Phase 0 关闭条件
 
