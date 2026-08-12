@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} · LabArchive{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <h1>{{ title }}</h1>
+    <p>正式归档、更换负责人和软删除仅由系统管理员执行。</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">保存项目</button>
+    </form>
+  </section>
+{% endblock %}

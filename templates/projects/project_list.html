@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}项目目录 · LabArchive{% endblock %}
+
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Phase 2</p>
+      <h1>项目目录</h1>
+      <p>内部项目对正常登录成员只读开放；受限项目只展示最小目录信息。</p>
+    </div>
+    <a class="button-link" href="{% url 'projects:create' %}">创建项目</a>
+  </div>
+
+  <section class="card table-card">
+    {% if entries %}
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>编号</th>
+              <th>名称</th>
+              <th>负责人</th>
+              <th>状态</th>
+              <th>可见性</th>
+              <th>我的权限</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+              <tr>
+                <td><a href="{% url 'projects:detail' entry.project.pk %}">{{ entry.project.project_code }}</a></td>
+                <td>{{ entry.project.name }}</td>
+                <td>{{ entry.project.principal_investigator }}</td>
+                <td>{{ entry.project.get_status_display }}</td>
+                <td>{{ entry.project.get_visibility_display }}</td>
+                <td>
+                  {% if entry.membership %}
+                    {{ entry.membership.get_role_display }}
+                  {% elif is_system_admin %}
+                    系统管理员
+                  {% elif entry.can_view %}
+                    内部只读
+                  {% else %}
+                    可申请访问
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>暂无项目。正常状态的课题组成员可以创建第一个项目。</p>
+    {% endif %}
+  </section>
+{% endblock %}

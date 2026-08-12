@@ -13,8 +13,34 @@ from apps.accounts.constants import LAB_MEMBER_GROUP, SYSTEM_ADMIN_GROUP
 from apps.accounts.forms import LabArchiveUserChangeForm, LabArchiveUserCreationForm
 from apps.accounts.models import AccountStatus
 from apps.audit.models import AuditAction, AuditLog
+from apps.projects.models import ProjectMembership, ProjectRole, ProjectVisibility
+
+from .project_factories import make_project
 
 pytestmark = pytest.mark.django_db
+
+
+def _admin_user_change_payload(user, *, account_status):
+    profile = user.profile
+    return {
+        "username": user.username,
+        "display_name": user.display_name,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "email": user.email,
+        "account_status": account_status,
+        "groups": [str(group_id) for group_id in user.groups.values_list("pk", flat=True)],
+        "profile-TOTAL_FORMS": "1",
+        "profile-INITIAL_FORMS": "1",
+        "profile-MIN_NUM_FORMS": "0",
+        "profile-MAX_NUM_FORMS": "1",
+        "profile-0-id": str(profile.pk),
+        "profile-0-department": profile.department,
+        "profile-0-student_or_staff_id": profile.student_or_staff_id,
+        "profile-0-phone": profile.phone,
+        "profile-0-notes": profile.notes,
+        "_save": "保存",
+    }
 
 
 def test_superuser_can_generate_one_time_temporary_password():
@@ -88,6 +114,90 @@ def test_admin_status_change_is_synchronized_and_audited():
     assert event.actor == admin_user
     assert event.old_value == {"account_status": AccountStatus.ACTIVE}
     assert event.new_value == {"account_status": AccountStatus.DEPARTED}
+
+
+def test_admin_change_post_departure_closes_restricted_direct_membership():
+    admin_user = get_user_model().objects.create_superuser(
+        username="departure-post-admin",
+        password="Admin-strong-password-2026!",
+    )
+    pi = get_user_model().objects.create_user(username="departure-post-pi")
+    target = get_user_model().objects.create_user(username="departure-post-target")
+    project = make_project(
+        pi=pi,
+        code="ADMIN-DEPARTURE",
+        visibility=ProjectVisibility.RESTRICTED,
+    )
+    membership = ProjectMembership.objects.create(
+        project=project,
+        user=target,
+        role=ProjectRole.MEMBER,
+    )
+    client = Client()
+    client.force_login(admin_user)
+
+    response = client.post(
+        reverse("admin:accounts_user_change", args=(target.pk,)),
+        _admin_user_change_payload(target, account_status=AccountStatus.DEPARTED),
+    )
+
+    assert response.status_code == 302
+    target.refresh_from_db()
+    membership.refresh_from_db()
+    assert target.account_status == AccountStatus.DEPARTED
+    assert target.is_active is False
+    assert membership.left_at is not None
+    assert AuditLog.objects.filter(
+        action=AuditAction.PROJECT_MEMBER_REMOVED,
+        object_id=str(membership.pk),
+        actor=admin_user,
+    ).exists()
+    assert AuditLog.objects.filter(
+        action=AuditAction.USER_STATUS_CHANGED,
+        object_id=str(target.pk),
+        actor=admin_user,
+    ).exists()
+
+
+def test_admin_change_post_pi_departure_returns_form_error_and_preserves_relationship():
+    admin_user = get_user_model().objects.create_superuser(
+        username="pi-departure-post-admin",
+        password="Admin-strong-password-2026!",
+    )
+    pi = get_user_model().objects.create_user(username="pi-departure-post-target")
+    project = make_project(
+        pi=pi,
+        code="ADMIN-PI-BLOCK",
+        visibility=ProjectVisibility.RESTRICTED,
+    )
+    pi_membership = ProjectMembership.objects.get(
+        project=project,
+        user=pi,
+        role=ProjectRole.PI,
+        left_at__isnull=True,
+    )
+    client = Client()
+    client.force_login(admin_user)
+
+    response = client.post(
+        reverse("admin:accounts_user_change", args=(pi.pk,)),
+        _admin_user_change_payload(pi, account_status=AccountStatus.DEPARTED),
+    )
+
+    assert response.status_code == 200
+    assert "请先转移未软删除项目负责人" in response.content.decode()
+    assert project.project_code in response.content.decode()
+    pi.refresh_from_db()
+    project.refresh_from_db()
+    pi_membership.refresh_from_db()
+    assert pi.account_status == AccountStatus.ACTIVE
+    assert pi.is_active is True
+    assert project.principal_investigator == pi
+    assert pi_membership.left_at is None
+    assert not AuditLog.objects.filter(
+        action=AuditAction.USER_STATUS_CHANGED,
+        object_id=str(pi.pk),
+    ).exists()
 
 
 def test_admin_role_assignment_sets_staff_and_creates_role_audit():
