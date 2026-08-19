@@ -16,6 +16,7 @@ jobs:
           POSTGRES_DB: labarchive
           POSTGRES_USER: labarchive
           POSTGRES_PASSWORD: labarchive-ci-only
+          POSTGRES_INITDB_ARGS: --data-checksums
         ports:
           - 5432:5432
         options: >-

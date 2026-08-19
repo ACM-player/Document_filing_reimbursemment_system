@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}个人资料 · LabArchive{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <h1>个人资料</h1>
+    <p>用户名、账号状态和系统角色只能由系统管理员修改。</p>
+    <dl class="summary-list">
+      <div><dt>用户名</dt><dd>{{ request.user.username }}</dd></div>
+      <div><dt>账号状态</dt><dd>{{ request.user.get_account_status_display }}</dd></div>
+    </dl>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <fieldset>
+        <legend>基本信息</legend>
+        {{ user_form.as_p }}
+      </fieldset>
+      <fieldset>
+        <legend>课题组资料</legend>
+        {{ profile_form.as_p }}
+      </fieldset>
+      <button type="submit">保存资料</button>
+    </form>
+  </section>
+{% endblock %}
