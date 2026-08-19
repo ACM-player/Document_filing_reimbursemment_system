@@ -4,6 +4,7 @@ from .base import *  # noqa: F403
 from .base import SECRET_KEY
 
 DEBUG = False
+LABARCHIVE_REQUIRE_MALWARE_SCAN = True
 
 if SECRET_KEY.startswith("development-only-"):
     raise ImproperlyConfigured("LABARCHIVE_SECRET_KEY must be set in production.")

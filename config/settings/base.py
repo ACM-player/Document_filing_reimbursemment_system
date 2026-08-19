@@ -9,6 +9,12 @@ env = environ.Env(
     POSTGRES_PORT=(int, 5432),
     POSTGRES_CONN_MAX_AGE=(int, 0),
     LABARCHIVE_MAX_UPLOAD_SIZE=(int, 100 * 1024 * 1024),
+    LABARCHIVE_ZIP_MAX_TOTAL_SIZE=(int, 1024 * 1024 * 1024),
+    LABARCHIVE_ZIP_MAX_MEMBER_SIZE=(int, 256 * 1024 * 1024),
+    LABARCHIVE_ZIP_MAX_COMPRESSION_RATIO=(int, 100),
+    LABARCHIVE_ZIP_MAX_MEMBERS=(int, 10_000),
+    LABARCHIVE_OOXML_METADATA_MAX_SIZE=(int, 4 * 1024 * 1024),
+    LABARCHIVE_REQUIRE_MALWARE_SCAN=(bool, False),
 )
 environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 
@@ -122,7 +128,46 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = _configured_path("LABARCHIVE_MEDIA_ROOT", "media")
+LABARCHIVE_STAGING_ROOT = _configured_path(
+    "LABARCHIVE_STAGING_ROOT",
+    str(MEDIA_ROOT / ".staging"),
+)
 LABARCHIVE_BACKUP_PATH = _configured_path("LABARCHIVE_BACKUP_PATH", ".local/backups")
+
+LABARCHIVE_ALLOWED_UPLOAD_EXTENSIONS = (
+    ".pdf",
+    ".docx",
+    ".xlsx",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".zip",
+)
+LABARCHIVE_MAX_UPLOAD_SIZE = env.int(
+    "LABARCHIVE_MAX_UPLOAD_SIZE",
+    default=100 * 1024 * 1024,
+)
+LABARCHIVE_ZIP_MAX_TOTAL_SIZE = env.int(
+    "LABARCHIVE_ZIP_MAX_TOTAL_SIZE",
+    default=1024 * 1024 * 1024,
+)
+LABARCHIVE_ZIP_MAX_MEMBER_SIZE = env.int(
+    "LABARCHIVE_ZIP_MAX_MEMBER_SIZE",
+    default=256 * 1024 * 1024,
+)
+LABARCHIVE_ZIP_MAX_COMPRESSION_RATIO = env.int(
+    "LABARCHIVE_ZIP_MAX_COMPRESSION_RATIO",
+    default=100,
+)
+LABARCHIVE_ZIP_MAX_MEMBERS = env.int("LABARCHIVE_ZIP_MAX_MEMBERS", default=10_000)
+LABARCHIVE_OOXML_METADATA_MAX_SIZE = env.int(
+    "LABARCHIVE_OOXML_METADATA_MAX_SIZE",
+    default=4 * 1024 * 1024,
+)
+LABARCHIVE_REQUIRE_MALWARE_SCAN = env.bool(
+    "LABARCHIVE_REQUIRE_MALWARE_SCAN",
+    default=False,
+)
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = env.int(
     "LABARCHIVE_MAX_UPLOAD_SIZE",

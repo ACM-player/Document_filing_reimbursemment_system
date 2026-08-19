@@ -163,6 +163,17 @@ stateDiagram-v2
 - 只有未删除 Document 关联的 AVAILABLE FileAsset 可以下载；软删除保留物理字节，恢复重新校验；
 - 文件写锁序为 User → Project → Document/document group → FileAsset。
 
+CP2 已将上述边界落为可复用基础设施：临时文件固定写入同文件系统的
+`LABARCHIVE_STAGING_ROOT/<asset_uuid>.part`，最终 key 由服务器生成成
+`projects/<project_uuid>/documents/<asset_prefix>/<asset_uuid>.<ext>`，流式写入同时限制大小并计算
+SHA256，最终发布拒绝覆盖已存在资产。所有测试使用独立临时目录，不写固定测试媒体目录。
+
+ZIP 检查在内存和磁盘上均不展开成员，但会受限流式读取每个成员以验证 CRC，并拒绝路径穿越、drive
+路径、反斜杠、加密、链接/特殊文件、重复路径、嵌套 ZIP 和超限压缩结构。上传、ZIP、OOXML 元数据阈值
+全部集中在 settings；DOCX/XLSX 还必须通过必要 XML 结构、主内容类型和无宏检查。扫描器通过 adapter
+返回独立事实；本地/CI 可以明确记录 `NOT_CONFIGURED`，production settings 无条件要求真实扫描结果为
+`CLEAN` 才允许后续服务发布。
+
 全局分类 `project=NULL` 由 SYSTEM_ADMIN 管理；项目自定义分类由该项目 PI、MANAGER 或 SYSTEM_ADMIN
 管理。新文档只能使用启用的全局分类或本项目分类。完整事务、状态、权限和 ZIP 规则见
 [ADR-0006](adr/0006-phase3-file-storage-security.md)。

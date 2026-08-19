@@ -119,4 +119,4 @@ compose.yaml          本地 Docker Compose
 
 Phase 1 已实现账号生命周期、预定义系统角色、认证和审计基础。Phase 2 已实现项目类型、项目 CRUD、项目成员、`INTERNAL` / `RESTRICTED` 访问控制、访问申请生命周期、账号离组撤权、精确授权血缘及关键操作审计；本机 PostgreSQL migration、132 项综合测试、五条真实事务并发链和多角色浏览器流程均已通过。
 
-Phase 1 / Phase 2 的 PR 均已合并，最新 Phase 1 / Phase 2 收口 `main` CI 已通过。文件上传下载、档案级鉴权、SHA256 和回收站正在 Phase 3 按独立 checkpoint 实现；报销与附件联合权限仍属于 Phase 4；外部到期调度、Docker 和生产部署验收保留到对应后续阶段。当前证据和边界见 [taskline.md](taskline.md) 与 [Phase 2 执行报告](docs/PHASE2_REPORT.md)，历史阶段结果见 [Phase 1 执行报告](docs/PHASE1_REPORT.md) 与 [Phase 0 执行报告](docs/PHASE0_REPORT.md)。
+Phase 1 / Phase 2 的 PR 均已合并，最新 Phase 1 / Phase 2 收口 `main` CI 已通过。Phase 3 已按独立 checkpoint 完成架构冻结、文件模型/权限，以及受控 staging、SHA256、真实类型/ZIP/OOXML 校验和扫描 adapter 基础设施；完整上传 saga、下载、回收站与 UI 仍在后续 Phase 3 checkpoint。报销与附件联合权限仍属于 Phase 4；外部到期调度、Docker 和生产部署验收保留到对应后续阶段。当前证据和边界见 [taskline.md](taskline.md) 与 [Phase 2 执行报告](docs/PHASE2_REPORT.md)，历史阶段结果见 [Phase 1 执行报告](docs/PHASE1_REPORT.md) 与 [Phase 0 执行报告](docs/PHASE0_REPORT.md)。
