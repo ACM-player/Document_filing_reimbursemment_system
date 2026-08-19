@@ -2,7 +2,7 @@
 
 ## 1. 状态与目标
 
-本文是 Phase 0 架构基线。当前优先在开发者本机完成开发、自动化测试和个人试运行；核心流程稳定、备份恢复通过后，再进入实验室 Linux 服务器部署。
+本文是 Phase 0 建立并在后续 Phase 持续冻结的架构基线。当前优先在开发者本机完成开发、自动化测试和个人试运行；核心流程稳定、备份恢复通过后，再进入实验室 Linux 服务器部署。Phase 3 文件架构细节见 ADR-0006。
 
 长期优先级：
 
@@ -131,24 +131,41 @@ DISABLED -> DEPARTED
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Temporary: 接收上传
-    Temporary --> Quarantined: 类型异常或待扫描
-    Temporary --> Available: 校验通过并原子入库
-    Quarantined --> Available: 管理员确认或扫描通过
-    Available --> Missing: 完整性检查发现缺失
-    Available --> Deleted: 业务软删除且满足清理条件
-    Deleted --> [*]: 物理清理并留下审计
+    [*] --> TEMPORARY: 创建上传意图
+    TEMPORARY --> QUARANTINED: 类型异常、扫描未决或可恢复失败
+    TEMPORARY --> AVAILABLE: 校验、移动、复核和审计成功
+    TEMPORARY --> DELETED: 取消或过期清理
+    QUARANTINED --> AVAILABLE: 重新校验或扫描通过
+    QUARANTINED --> DELETED: 逻辑删除
+    AVAILABLE --> MISSING: 文件不存在或完整性失败
+    AVAILABLE --> DELETED: 文档软删除
+    MISSING --> AVAILABLE: 文件修复并完整校验
+    MISSING --> DELETED: 逻辑删除
+    DELETED --> AVAILABLE: 恢复并重新校验
+    DELETED --> MISSING: 恢复时文件缺失
+    DELETED --> QUARANTINED: 恢复时安全检查失败
 ```
 
 关键约束：
 
 - 物理文件名使用 UUID 与受控扩展名；
-- 数据库只保存相对于 `MEDIA_ROOT` 的路径；
+- 数据库只保存服务器生成、相对于受控存储根目录的 storage key；原始文件名仅用于显示；
 - 入库后不覆盖文件；替换即创建新资产或新版本；
 - SHA256 相同只提示，不在 V1 自动去重；
+- Phase 3 新上传建立独立 document group，固定 `version=1`、`is_current=true`，不提供替换 UI；
+- 白名单为 PDF、DOCX、XLSX、PNG、JPEG/JPG、ZIP，不支持 `.doc`、`.xls`；
+- 服务端使用二进制签名、OOXML 结构和 ZIP 安全规则识别真实类型，不信任客户端 MIME；
 - 上传目录不作为公开静态目录；
 - 生产下载由 Django 鉴权，再交给 Nginx 受控传输；
-- 数据库提交与文件移动失败时必须补偿，不能留下无主“正常”记录。
+- 数据库提交与文件移动使用持久化 TEMPORARY 状态、同文件系统原子移动、第二事务复核和幂等补偿；
+- stale staging、DB 缺文件和无 DB 文件由 reconciliation 报告或隔离，不静默删除；
+- 本地/CI 的确定性检查与生产恶意软件扫描分开记录；production 扫描不可用时 fail closed；
+- 只有未删除 Document 关联的 AVAILABLE FileAsset 可以下载；软删除保留物理字节，恢复重新校验；
+- 文件写锁序为 User → Project → Document/document group → FileAsset。
+
+全局分类 `project=NULL` 由 SYSTEM_ADMIN 管理；项目自定义分类由该项目 PI、MANAGER 或 SYSTEM_ADMIN
+管理。新文档只能使用启用的全局分类或本项目分类。完整事务、状态、权限和 ZIP 规则见
+[ADR-0006](adr/0006-phase3-file-storage-security.md)。
 
 ## 8. 报销状态机
 
@@ -191,13 +208,14 @@ DRAFT / RETURNED -> CANCELLED
 | Python | 3.13.x | 已确认，跟随安全微版本 |
 | 数据库 | PostgreSQL 17.10 | 已安装并完成本地 migration 与测试 |
 | 单文件上限 | 100 MiB | 待真实文件样本验证 |
+| ZIP 安全门禁 | 总展开 1 GiB、单成员 256 MiB、100:1、10,000 成员、拒绝嵌套 ZIP | Phase 3 已冻结，后续实现与样本验证 |
 | 账号创建 | 管理员创建、线下临时密码、首次登录强制改密 | 已确认 |
 | 项目文件可见性 | INTERNAL 默认内部只读；RESTRICTED 申请访问 | 已确认 |
 | Session | 12 小时、关闭浏览器失效 | 已确认 |
 | 回收站保留 | 暂定 90 天，V1 默认不自动物理删除 | 待业务确认 |
 | RPO | 本地试运行暂定 24 小时 | 正式部署前确认 |
 | RTO | 本地试运行暂定 1 个工作日 | 正式部署前确认 |
-| 恶意文件扫描 | 接口预留，生产启用方案待定 | 上线前阻塞项 |
+| 恶意文件扫描 | adapter 与 fail-closed 语义已冻结；生产扫描器待选择 | 上线前阻塞项；不得把未配置记录为扫描通过 |
 | 生产服务器 | 未选择 | 服务器阶段确认 |
 
 ## 12. 服务器部署准入

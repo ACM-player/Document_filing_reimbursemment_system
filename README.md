@@ -2,7 +2,7 @@
 
 课题组科研事务、报销与数字档案管理平台。
 
-当前阶段：**Phase 2 项目系统已完成本地实现与验收，等待提交、远端 CI 和评审**。仍以本地开发和个人试运行为主，尚未进入文件档案、报销业务或实验室服务器部署阶段。
+当前阶段：**Phase 1 / Phase 2 已合并并完成各自范围的本地验收与远端 CI；Phase 3 文件档案系统已进入开发**。仍以本地开发和个人试运行为主，尚未进入报销业务或实验室服务器部署阶段。
 
 ## 技术基线
 
@@ -119,4 +119,4 @@ compose.yaml          本地 Docker Compose
 
 Phase 1 已实现账号生命周期、预定义系统角色、认证和审计基础。Phase 2 已实现项目类型、项目 CRUD、项目成员、`INTERNAL` / `RESTRICTED` 访问控制、访问申请生命周期、账号离组撤权、精确授权血缘及关键操作审计；本机 PostgreSQL migration、132 项综合测试、五条真实事务并发链和多角色浏览器流程均已通过。
 
-Phase 2 仍未提交或推送，远端 CI / PR 尚未执行。文件上传下载、档案级鉴权、SHA256 和回收站属于 Phase 3；报销与附件联合权限属于 Phase 4；外部到期调度、Docker 和生产部署验收保留到对应后续阶段。当前证据和边界见 [Phase 2 执行报告](docs/PHASE2_REPORT.md)，历史阶段结果见 [Phase 1 执行报告](docs/PHASE1_REPORT.md) 与 [Phase 0 执行报告](docs/PHASE0_REPORT.md)。
+Phase 1 / Phase 2 的 PR 均已合并，最新 Phase 1 / Phase 2 收口 `main` CI 已通过。文件上传下载、档案级鉴权、SHA256 和回收站正在 Phase 3 按独立 checkpoint 实现；报销与附件联合权限仍属于 Phase 4；外部到期调度、Docker 和生产部署验收保留到对应后续阶段。当前证据和边界见 [taskline.md](taskline.md) 与 [Phase 2 执行报告](docs/PHASE2_REPORT.md)，历史阶段结果见 [Phase 1 执行报告](docs/PHASE1_REPORT.md) 与 [Phase 0 执行报告](docs/PHASE0_REPORT.md)。
