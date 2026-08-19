@@ -65,7 +65,17 @@ def test_signature_formats_are_detected_from_content(tmp_path, filename, payload
     assert result.sha256 == hashlib.sha256(payload).hexdigest()
 
 
-@pytest.mark.parametrize("filename", ["../paper.pdf", "folder/paper.pdf", "paper.exe", "paper.doc"])
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "../paper.pdf",
+        "folder/paper.pdf",
+        "paper.exe",
+        "paper.doc",
+        "header\r\ninjection.pdf",
+        "disguise\u202epdf.exe.pdf",
+    ],
+)
 def test_original_filename_rejects_paths_and_non_whitelisted_extensions(filename):
     with pytest.raises(FileValidationError):
         normalize_original_filename(filename)

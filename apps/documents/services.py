@@ -1,6 +1,7 @@
+import hashlib
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from typing import Any, BinaryIO
 from uuid import UUID
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -11,6 +12,7 @@ from apps.accounts.models import User
 from apps.audit.models import AuditAction, AuditResult
 from apps.audit.services import record_audit_event
 from apps.projects.models import Project
+from apps.projects.permissions import is_project_portal_user
 
 from .models import (
     Document,
@@ -40,6 +42,27 @@ class DocumentUploadError(Exception):
 class UploadOutcome:
     document: Document
     is_replay: bool
+
+
+@dataclass(frozen=True)
+class PreparedDownload:
+    document: Document
+    file: BinaryIO
+    filename: str
+    content_type: str
+    file_size: int
+
+
+class DocumentDownloadError(Exception):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class _DownloadDecision:
+    prepared: PreparedDownload | None = None
+    error: DocumentDownloadError | None = None
 
 
 @dataclass(frozen=True)
@@ -680,3 +703,177 @@ def resume_temporary_upload(
             document=current,
         ) from exc
     raise AssertionError("unreachable")
+
+
+def _audit_download_failure(*, actor, subject, code, result, http_request=None) -> None:
+    record_audit_event(
+        action=AuditAction.FILE_DOWNLOADED,
+        request=http_request,
+        actor=actor,
+        subject=subject,
+        description="文件下载请求失败",
+        new_value={"reason": code},
+        result=result,
+    )
+
+
+def _sha256_from_open_file(file_object: BinaryIO) -> str:
+    digest = hashlib.sha256()
+    file_object.seek(0)
+    while chunk := file_object.read(1024 * 1024):
+        digest.update(chunk)
+    file_object.seek(0)
+    return digest.hexdigest()
+
+
+def _prepare_document_download(
+    *,
+    actor,
+    document_id: UUID,
+    storage: ControlledFileStorage,
+    http_request=None,
+) -> _DownloadDecision:
+    locked_actor = _lock_actor(actor)
+    if not is_project_portal_user(locked_actor):
+        raise PermissionDenied("当前账号无权进入项目文件系统。")
+    document_hint = Document.all_objects.only("project_id").filter(pk=document_id).first()
+    if document_hint is None:
+        _audit_download_failure(
+            actor=locked_actor,
+            subject=None,
+            code="document_not_found",
+            result=AuditResult.DENIED,
+            http_request=http_request,
+        )
+        return _DownloadDecision(
+            error=DocumentDownloadError("document_not_found", "文件不存在或无权访问。")
+        )
+    project = _lock_projects({document_hint.project_id})[document_hint.project_id]
+    document, asset = _lock_document_and_asset(document_id)
+    document.project = project
+    if not can_view_document(locked_actor, document):
+        _audit_download_failure(
+            actor=locked_actor,
+            subject=document,
+            code="download_denied",
+            result=AuditResult.DENIED,
+            http_request=http_request,
+        )
+        return _DownloadDecision(
+            error=DocumentDownloadError("download_denied", "文件不存在或无权访问。")
+        )
+    if asset.storage_status != FileStorageStatus.AVAILABLE or asset.deleted_at is not None:
+        _audit_download_failure(
+            actor=locked_actor,
+            subject=document,
+            code="asset_unavailable",
+            result=AuditResult.FAILED,
+            http_request=http_request,
+        )
+        return _DownloadDecision(
+            error=DocumentDownloadError("asset_unavailable", "文件当前不可下载。")
+        )
+
+    try:
+        file_object = storage.open_final(asset.relative_path)
+    except StorageError as exc:
+        asset.storage_status = FileStorageStatus.MISSING
+        asset.status_reason = _status_reason(exc.code)
+        asset.save(update_fields={"storage_status", "status_reason", "updated_at"})
+        record_audit_event(
+            action=AuditAction.FILE_MARKED_MISSING,
+            request=http_request,
+            actor=locked_actor,
+            subject=document,
+            description="下载前物理文件缺失或不能安全打开",
+            new_value={"asset_id": str(asset.pk), "reason": exc.code},
+            result=AuditResult.FAILED,
+        )
+        _audit_download_failure(
+            actor=locked_actor,
+            subject=document,
+            code=exc.code,
+            result=AuditResult.FAILED,
+            http_request=http_request,
+        )
+        return _DownloadDecision(
+            error=DocumentDownloadError("asset_missing", "物理文件缺失或不可安全读取。")
+        )
+
+    actual_size = file_object.seek(0, 2)
+    file_object.seek(0)
+    if actual_size != asset.file_size:
+        actual_sha256 = _sha256_from_open_file(file_object)
+        file_object.close()
+        asset.storage_status = FileStorageStatus.MISSING
+        asset.status_reason = "file_metadata_mismatch"
+        asset.save(update_fields={"storage_status", "status_reason", "updated_at"})
+        record_audit_event(
+            action=AuditAction.FILE_INTEGRITY_FAILED,
+            request=http_request,
+            actor=locked_actor,
+            subject=document,
+            description="下载前文件大小异常并完成 SHA256 复核",
+            old_value={"file_size": asset.file_size, "sha256": asset.sha256},
+            new_value={"file_size": actual_size, "sha256": actual_sha256},
+            result=AuditResult.FAILED,
+        )
+        _audit_download_failure(
+            actor=locked_actor,
+            subject=document,
+            code="file_metadata_mismatch",
+            result=AuditResult.FAILED,
+            http_request=http_request,
+        )
+        return _DownloadDecision(
+            error=DocumentDownloadError("integrity_failed", "文件完整性元数据异常。")
+        )
+
+    try:
+        record_audit_event(
+            action=AuditAction.FILE_DOWNLOADED,
+            request=http_request,
+            actor=locked_actor,
+            subject=document,
+            description="文件已鉴权并开始受控下载",
+            new_value={"asset_id": str(asset.pk), "file_size": asset.file_size},
+        )
+    except Exception:
+        file_object.close()
+        raise
+    return _DownloadDecision(
+        prepared=PreparedDownload(
+            document=document,
+            file=file_object,
+            filename=asset.original_filename,
+            content_type=asset.detected_mime_type,
+            file_size=asset.file_size,
+        )
+    )
+
+
+def prepare_document_download(
+    *,
+    actor,
+    document_id: UUID,
+    storage: ControlledFileStorage | None = None,
+    http_request=None,
+) -> PreparedDownload:
+    decision = None
+    try:
+        with transaction.atomic():
+            decision = _prepare_document_download(
+                actor=actor,
+                document_id=document_id,
+                storage=storage or ControlledFileStorage(),
+                http_request=http_request,
+            )
+    except Exception:
+        if decision is not None and decision.prepared is not None:
+            decision.prepared.file.close()
+        raise
+    if decision.error is not None:
+        raise decision.error
+    if decision.prepared is None:
+        raise DocumentDownloadError("download_failed", "文件下载准备失败。")
+    return decision.prepared

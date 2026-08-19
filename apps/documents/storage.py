@@ -1,5 +1,6 @@
 import hashlib
 import os
+import stat
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -79,6 +80,25 @@ class ControlledFileStorage:
         if not candidate.is_relative_to(self.media_root) or candidate == self.media_root:
             raise StorageError("unsafe_storage_key", "存储键越出受控目录。")
         return candidate
+
+    def open_final(self, relative_key: str):
+        parts = _safe_relative_parts(relative_key)
+        candidate = self.media_root.joinpath(*parts)
+        resolved_parent = candidate.parent.resolve()
+        if not resolved_parent.is_relative_to(self.media_root) or candidate.is_symlink():
+            raise StorageError("unsafe_storage_key", "最终文件路径越出受控目录或是链接。")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(candidate, flags)
+        except FileNotFoundError as exc:
+            raise StorageError("final_file_missing", "最终文件不存在。") from exc
+        except OSError as exc:
+            raise StorageError("final_file_unreadable", "最终文件不可安全读取。") from exc
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            os.close(descriptor)
+            raise StorageError("final_file_not_regular", "最终文件不是普通文件。")
+        return os.fdopen(descriptor, "rb")
 
     def stage_chunks(self, asset_id: UUID, chunks: Iterable[bytes]) -> StagedFile:
         self.ensure_roots()

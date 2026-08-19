@@ -1,6 +1,7 @@
 import hashlib
 import re
 import stat
+import unicodedata
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -53,6 +54,7 @@ def normalize_original_filename(filename: str) -> tuple[str, str]:
         or "\x00" in normalized
         or "/" in normalized
         or "\\" in normalized
+        or any(unicodedata.category(character).startswith("C") for character in normalized)
     ):
         raise FileValidationError("unsafe_filename", "文件名无效或包含路径信息。")
     extension = Path(normalized).suffix.lower()
