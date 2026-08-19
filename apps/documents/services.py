@@ -2,17 +2,22 @@ import hashlib
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, BinaryIO
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.audit.models import AuditAction, AuditResult
 from apps.audit.services import record_audit_event
-from apps.projects.models import Project
-from apps.projects.permissions import is_project_portal_user
+from apps.projects.models import Project, ProjectRole, ProjectStatus
+from apps.projects.permissions import (
+    is_project_portal_user,
+    is_system_admin,
+    valid_memberships,
+)
 
 from .models import (
     Document,
@@ -20,7 +25,12 @@ from .models import (
     FileAsset,
     FileStorageStatus,
 )
-from .permissions import can_upload_documents, can_view_document
+from .permissions import (
+    can_restore_document,
+    can_soft_delete_document,
+    can_upload_documents,
+    can_view_document,
+)
 from .scanning import MalwareScanner, ScanResult, scan_allows_release, scan_file
 from .storage import ControlledFileStorage, StagedFile, StorageError
 from .validation import (
@@ -59,6 +69,12 @@ class DocumentDownloadError(Exception):
         self.code = code
 
 
+class DocumentLifecycleError(Exception):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
 @dataclass(frozen=True)
 class _DownloadDecision:
     prepared: PreparedDownload | None = None
@@ -70,6 +86,18 @@ class _UploadIntent:
     document: Document | None = None
     error: DocumentUploadError | None = None
     is_replay: bool = False
+
+
+@dataclass(frozen=True)
+class _RestoreIntent:
+    document_id: UUID
+    asset_id: UUID
+    original_filename: str
+    relative_path: str
+    file_size: int
+    sha256: str
+    detected_mime_type: str
+    storage_status: str
 
 
 def _lock_actor(actor) -> User:
@@ -107,7 +135,7 @@ def _lock_document_and_asset(document_id: UUID) -> tuple[Document, FileAsset]:
             .get(pk=document_id)
         )
     except Document.DoesNotExist as exc:
-        raise ValidationError("上传文档不存在。") from exc
+        raise ValidationError("文档不存在。") from exc
     asset = FileAsset.objects.select_for_update().get(pk=document.file_asset_id)
     document.file_asset = asset
     return document, asset
@@ -877,3 +905,369 @@ def prepare_document_download(
     if decision.prepared is None:
         raise DocumentDownloadError("download_failed", "文件下载准备失败。")
     return decision.prepared
+
+
+def recycle_bin_documents_for(actor):
+    if not is_project_portal_user(actor):
+        raise PermissionDenied("当前账号无权进入项目文件系统。")
+    documents = (
+        Document.all_objects.select_related("project", "category", "file_asset", "uploaded_by")
+        .filter(deleted_at__isnull=False, project__deleted_at__isnull=True)
+        .exclude(project__status=ProjectStatus.ARCHIVED)
+    )
+    if is_system_admin(actor):
+        return documents
+    effective_manager_memberships = (
+        valid_memberships()
+        .filter(
+            project_id=OuterRef("project_id"),
+            user=actor,
+            role__in=(ProjectRole.PI, ProjectRole.MANAGER),
+        )
+        .filter(
+            Q(role=ProjectRole.PI, project__principal_investigator=actor)
+            | Q(role=ProjectRole.MANAGER) & ~Q(project__principal_investigator=actor)
+        )
+    )
+    return documents.alias(has_restore_membership=Exists(effective_manager_memberships)).filter(
+        has_restore_membership=True
+    )
+
+
+@transaction.atomic
+def soft_delete_document(*, actor, document: Document, http_request=None) -> Document:
+    locked_actor = _lock_actor(actor)
+    if not is_project_portal_user(locked_actor):
+        raise PermissionDenied("当前账号无权进入项目文件系统。")
+    document_hint = (
+        Document.all_objects.only("project_id").filter(pk=getattr(document, "pk", None)).first()
+    )
+    if document_hint is None:
+        raise DocumentLifecycleError("document_not_found", "文档不存在或无权操作。")
+    project = _lock_projects({document_hint.project_id})[document_hint.project_id]
+    locked_document, asset = _lock_document_and_asset(document_hint.pk)
+    locked_document.project = project
+    if not can_soft_delete_document(locked_actor, locked_document):
+        raise PermissionDenied("当前账号无权删除该文档。")
+    if asset.storage_status not in {
+        FileStorageStatus.AVAILABLE,
+        FileStorageStatus.MISSING,
+        FileStorageStatus.QUARANTINED,
+    }:
+        raise DocumentLifecycleError("asset_not_deletable", "当前文件状态不允许软删除。")
+    if asset.file_size is None or not asset.sha256 or not asset.detected_mime_type:
+        raise DocumentLifecycleError("asset_metadata_incomplete", "文件资产元数据不完整。")
+
+    deleted_at = timezone.now()
+    previous_status = asset.storage_status
+    locked_document.deleted_at = deleted_at
+    locked_document.save(update_fields={"deleted_at", "updated_at"})
+    asset.storage_status = FileStorageStatus.DELETED
+    asset.deleted_at = deleted_at
+    asset.quarantined_at = None
+    asset.status_reason = "soft_deleted"
+    asset.save(
+        update_fields={
+            "storage_status",
+            "deleted_at",
+            "quarantined_at",
+            "status_reason",
+            "updated_at",
+        }
+    )
+    record_audit_event(
+        action=AuditAction.DOCUMENT_SOFT_DELETED,
+        request=http_request,
+        actor=locked_actor,
+        subject=locked_document,
+        description="项目文档已移入回收站，物理文件保留",
+        old_value={"asset_status": previous_status},
+        new_value={"asset_status": FileStorageStatus.DELETED, "deleted_at": deleted_at.isoformat()},
+    )
+    return locked_document
+
+
+@transaction.atomic
+def _authorize_document_restore(*, actor, document_id: UUID) -> _RestoreIntent:
+    locked_actor = _lock_actor(actor)
+    if not is_project_portal_user(locked_actor):
+        raise PermissionDenied("当前账号无权进入项目文件系统。")
+    document_hint = Document.all_objects.only("project_id").filter(pk=document_id).first()
+    if document_hint is None:
+        raise DocumentLifecycleError("document_not_found", "文档不存在或无权操作。")
+    project = _lock_projects({document_hint.project_id})[document_hint.project_id]
+    document, asset = _lock_document_and_asset(document_id)
+    document.project = project
+    if not can_restore_document(locked_actor, document):
+        raise PermissionDenied("当前账号无权恢复该文档。")
+    if asset.storage_status not in {
+        FileStorageStatus.DELETED,
+        FileStorageStatus.MISSING,
+        FileStorageStatus.QUARANTINED,
+    }:
+        raise DocumentLifecycleError("asset_not_restorable", "当前文件状态不允许恢复。")
+    if asset.file_size is None or not asset.sha256 or not asset.detected_mime_type:
+        raise DocumentLifecycleError("asset_metadata_incomplete", "文件资产元数据不完整。")
+    return _RestoreIntent(
+        document_id=document.pk,
+        asset_id=asset.pk,
+        original_filename=asset.original_filename,
+        relative_path=asset.relative_path,
+        file_size=asset.file_size,
+        sha256=asset.sha256,
+        detected_mime_type=asset.detected_mime_type,
+        storage_status=asset.storage_status,
+    )
+
+
+@transaction.atomic
+def _record_restore_failure(
+    *,
+    actor,
+    intent: _RestoreIntent,
+    status: str,
+    reason: str,
+    scan_result: ScanResult | None = None,
+    http_request=None,
+) -> None:
+    locked_actor = _lock_actor(actor)
+    document_hint = Document.all_objects.only("project_id").get(pk=intent.document_id)
+    project = _lock_projects({document_hint.project_id})[document_hint.project_id]
+    document, asset = _lock_document_and_asset(intent.document_id)
+    document.project = project
+    if document.deleted_at is None or asset.pk != intent.asset_id:
+        raise DocumentLifecycleError("restore_state_changed", "文档状态已变化，请重试。")
+
+    asset.storage_status = status
+    asset.deleted_at = None
+    asset.status_reason = _status_reason(reason)
+    asset.quarantined_at = timezone.now() if status == FileStorageStatus.QUARANTINED else None
+    if scan_result is not None:
+        asset.malware_scan_status = scan_result.status
+    asset.save(
+        update_fields={
+            "storage_status",
+            "deleted_at",
+            "status_reason",
+            "quarantined_at",
+            "malware_scan_status",
+            "updated_at",
+        }
+    )
+    if status == FileStorageStatus.MISSING:
+        record_audit_event(
+            action=AuditAction.FILE_MARKED_MISSING,
+            request=http_request,
+            actor=locked_actor,
+            subject=document,
+            description="文档恢复时物理文件缺失或完整性失败",
+            new_value={"asset_id": str(asset.pk), "reason": reason},
+            result=AuditResult.FAILED,
+        )
+    else:
+        record_audit_event(
+            action=AuditAction.FILE_QUARANTINED,
+            request=http_request,
+            actor=locked_actor,
+            subject=document,
+            description="文档恢复安全检查未通过，资产保持隔离",
+            new_value={"asset_id": str(asset.pk), "reason": reason},
+            result=AuditResult.FAILED,
+        )
+    record_audit_event(
+        action=AuditAction.DOCUMENT_RESTORED,
+        request=http_request,
+        actor=locked_actor,
+        subject=document,
+        description="文档恢复失败",
+        new_value={"asset_status": status, "reason": reason},
+        result=AuditResult.FAILED,
+    )
+
+
+@transaction.atomic
+def _finalize_document_restore(
+    *,
+    actor,
+    intent: _RestoreIntent,
+    validated: ValidatedFile,
+    scan_result: ScanResult,
+    storage: ControlledFileStorage,
+    http_request=None,
+) -> Document:
+    locked_actor = _lock_actor(actor)
+    document_hint = Document.all_objects.only("project_id").get(pk=intent.document_id)
+    project = _lock_projects({document_hint.project_id})[document_hint.project_id]
+    document, asset = _lock_document_and_asset(intent.document_id)
+    document.project = project
+    if not can_restore_document(locked_actor, document):
+        raise PermissionDenied("当前账号无权恢复该文档。")
+    if asset.pk != intent.asset_id or asset.storage_status not in {
+        FileStorageStatus.DELETED,
+        FileStorageStatus.MISSING,
+        FileStorageStatus.QUARANTINED,
+    }:
+        raise DocumentLifecycleError("restore_state_changed", "文档状态已变化，请重试。")
+    if (
+        asset.relative_path != intent.relative_path
+        or asset.file_size != intent.file_size
+        or asset.sha256 != intent.sha256
+        or asset.detected_mime_type != intent.detected_mime_type
+    ):
+        raise DocumentLifecycleError("restore_metadata_changed", "文件元数据已变化，请重试。")
+    if (
+        Document.objects.filter(
+            document_group_id=document.document_group_id,
+            is_current=True,
+        )
+        .exclude(pk=document.pk)
+        .exists()
+    ):
+        raise DocumentLifecycleError("current_version_conflict", "该文档组已有当前版本。")
+
+    try:
+        with storage.open_final(asset.relative_path) as final_file:
+            actual_size = final_file.seek(0, 2)
+            actual_sha256 = _sha256_from_open_file(final_file)
+    except StorageError as exc:
+        raise DocumentLifecycleError(exc.code, "最终文件已变化，请重试恢复。") from exc
+    if actual_size != validated.file_size or actual_sha256 != validated.sha256:
+        raise DocumentLifecycleError("final_file_changed", "最终文件已变化，请重试恢复。")
+
+    deleted_at = document.deleted_at
+    document.deleted_at = None
+    document.save(update_fields={"deleted_at", "updated_at"})
+    asset.storage_status = FileStorageStatus.AVAILABLE
+    asset.deleted_at = None
+    asset.quarantined_at = None
+    asset.status_reason = ""
+    asset.malware_scan_status = scan_result.status
+    asset.save(
+        update_fields={
+            "storage_status",
+            "deleted_at",
+            "quarantined_at",
+            "status_reason",
+            "malware_scan_status",
+            "updated_at",
+        }
+    )
+    record_audit_event(
+        action=AuditAction.DOCUMENT_RESTORED,
+        request=http_request,
+        actor=locked_actor,
+        subject=document,
+        description="项目文档已从回收站恢复并重新通过安全校验",
+        old_value={
+            "deleted_at": deleted_at.isoformat(),
+            "asset_status": intent.storage_status,
+        },
+        new_value={"asset_status": FileStorageStatus.AVAILABLE},
+    )
+    return document
+
+
+def restore_document(
+    *,
+    actor,
+    document: Document,
+    storage: ControlledFileStorage | None = None,
+    scanner: MalwareScanner | None = None,
+    http_request=None,
+) -> Document:
+    active_storage = storage or ControlledFileStorage()
+    intent = _authorize_document_restore(actor=actor, document_id=document.pk)
+    staged = None
+    try:
+        try:
+            with active_storage.open_final(intent.relative_path) as final_file:
+                staged = active_storage.stage_chunks(
+                    uuid4(),
+                    iter(lambda: final_file.read(1024 * 1024), b""),
+                )
+        except StorageError as exc:
+            _record_restore_failure(
+                actor=actor,
+                intent=intent,
+                status=FileStorageStatus.MISSING,
+                reason=exc.code,
+                http_request=http_request,
+            )
+            raise DocumentLifecycleError("asset_missing", "物理文件缺失或不可安全读取。") from exc
+
+        try:
+            validated = validate_staged_file(
+                staged.path,
+                intent.original_filename,
+                expected_size=intent.file_size,
+                expected_sha256=intent.sha256,
+            )
+        except FileValidationError as exc:
+            status = (
+                FileStorageStatus.MISSING
+                if exc.code in {"size_mismatch", "sha256_mismatch", "missing_staged_file"}
+                else FileStorageStatus.QUARANTINED
+            )
+            _record_restore_failure(
+                actor=actor,
+                intent=intent,
+                status=status,
+                reason=exc.code,
+                http_request=http_request,
+            )
+            raise DocumentLifecycleError(exc.code, "文件未通过恢复安全校验。") from exc
+        if validated.detected_mime_type != intent.detected_mime_type:
+            _record_restore_failure(
+                actor=actor,
+                intent=intent,
+                status=FileStorageStatus.QUARANTINED,
+                reason="detected_mime_mismatch",
+                http_request=http_request,
+            )
+            raise DocumentLifecycleError(
+                "detected_mime_mismatch",
+                "文件服务端类型与入库记录不一致。",
+            )
+
+        scan_result = scan_file(staged.path, scanner)
+        if not scan_allows_release(scan_result):
+            _record_restore_failure(
+                actor=actor,
+                intent=intent,
+                status=FileStorageStatus.QUARANTINED,
+                reason=scan_result.reason_code or "scan_not_releasable",
+                scan_result=scan_result,
+                http_request=http_request,
+            )
+            raise DocumentLifecycleError("scan_not_releasable", "文件扫描状态不允许恢复。")
+
+        active_storage.discard_staged(staged.path)
+        staged = None
+        try:
+            return _finalize_document_restore(
+                actor=actor,
+                intent=intent,
+                validated=validated,
+                scan_result=scan_result,
+                storage=active_storage,
+                http_request=http_request,
+            )
+        except DocumentLifecycleError as exc:
+            if exc.code in {
+                "final_file_missing",
+                "final_file_unreadable",
+                "final_file_not_regular",
+                "unsafe_storage_key",
+                "final_file_changed",
+            }:
+                _record_restore_failure(
+                    actor=actor,
+                    intent=intent,
+                    status=FileStorageStatus.MISSING,
+                    reason=exc.code,
+                    http_request=http_request,
+                )
+            raise
+    finally:
+        if staged is not None:
+            active_storage.discard_staged(staged.path)
