@@ -8,24 +8,24 @@
 
 ### 1.1 当前开发阶段
 
-- 当前 Phase：Phase 2 — 项目系统；
-- 当前状态：**Phase 2 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR #2 待评审；真实文件下载联合权限验收待 Phase 3；Phase 3 尚未开始。**
-- 当前 Git 分支：`agent/phase-2-projects`；
+- 当前 Phase：Phase 1 / Phase 2 交付收口完成；Phase 3 尚未开始；
+- 当前状态：**Phase 1 / Phase 2 最终 review、stacked PR 合并、main CI 与本地 Git 基线收口均已完成；真实文件下载联合权限验收仍待 Phase 3。**
+- 当前 Git 分支：`main`；
 - Phase 2 实现 commit：`5c68b403 feat(projects): complete phase two project system`，父提交为 Phase 1 的 `119e209`；
-- 工作树：Phase 2 业务实现、测试、migration 与交付文档均已提交；本次远端事实同步使用单独的 `taskline.md` 文档 commit，最终状态以 `git status` 为准；
-- 远端状态：已推送并跟踪 `origin/agent/phase-2-projects`，实现 commit 与远端一致；
-- PR：[Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2)，base=`agent/phase-1-auth`，head=`agent/phase-2-projects`，当前 Open Draft、待评审；
-- GitHub Actions：实现 commit `5c68b403` 对应 [CI run 32255773119](https://github.com/ACM-player/Document_filing_reimbursemment_system/actions/runs/32255773119) 已通过；
-- Phase 1 的 Draft PR #1 仍为 Open Draft，尚未合并；远端 `main` 仍位于 `ed1443d`。
+- 工作树：Phase 1 / Phase 2 业务实现、测试、migration 与交付文档均已提交；除本次收口记录外没有遗留未跟踪或未提交文件，最终状态以 `git status` 为准；
+- 远端状态：Phase 1 / Phase 2 分支提交及两个 merge commit 均已进入 `origin/main`；本地 `main` 已 fast-forward 到 Phase 2 merge commit `0fccbb8`；
+- PR：[PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 已以 merge commit `ad3181c` 合并；[PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 已在 base 调整为 `main` 后以 merge commit `0fccbb8` 合并；
+- GitHub Actions：PR #1 head CI `31371151159`、PR #2 head CI `32256185247`、Phase 1 merge 后 main CI `32257435132`、Phase 2 merge 后 main CI `32257797190` 均为 success；
+- 拓扑整理：未 rebase、未 squash；Phase 1 采用 merge commit 后，`119e209` 同时是 `main` 与 Phase 2 head 的祖先，因此 PR #2 只需从 `agent/phase-1-auth` retarget 到 `main`。
 
 ### 1.2 各阶段状态
 
 | Phase | 状态 | 说明 |
 | --- | --- | --- |
 | Phase 0 | 本地验证完成；跨环境验收待办 | 本机 Conda + PostgreSQL 工程路径已验证；Docker 和第二套完整环境仍未闭环，不能标记为全部完成。 |
-| Phase 1 | 本地验证完成、CI 验证完成；跨阶段验收部分完成 | 账号、认证、系统角色和审计核心范围已实现；Phase 2 项目级权限联动已本地验收，真实项目文件下载待 Phase 3，报销附件联动待 Phase 4；Draft PR #1 未合并。 |
-| Phase 2 | 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR 待评审；真实文件下载联合权限验收待 Phase 3 | 项目元数据、可见性、成员、访问申请及项目级权限决策已通过 132 项 PostgreSQL 综合测试、五条真实事务并发链、migration、多角色浏览器流程和实现 commit 远端 CI；Draft PR #2 尚未评审。真实 Document / FileAsset 下载链路不属于本阶段已有证据。 |
-| Phase 3–10 | 未开始 | Phase 2 Draft PR 等待评审；Phase 1 / Phase 2 PR 拓扑调整或合并必须另行决定，当前不提前进入 Phase 3。 |
+| Phase 1 | 本地验证、CI、最终 review 与 PR 合并完成；跨阶段验收部分完成 | 账号、认证、系统角色和审计核心范围已进入 `main`；Phase 2 项目级权限联动已验收，真实项目文件下载待 Phase 3，报销附件联动待 Phase 4；PR #1 已合并。 |
+| Phase 2 | 可独立实现范围本地验收、CI、最终 review 与 PR 合并完成；真实文件下载联合权限验收待 Phase 3 | 项目元数据、可见性、成员、访问申请及项目级权限决策已通过 132 项 PostgreSQL 综合测试、五条真实事务并发链、migration、多角色浏览器流程及 PR/main CI；PR #2 已合并。真实 Document / FileAsset 下载链路不属于本阶段已有证据。 |
+| Phase 3–10 | 未开始 | Phase 1 / Phase 2 已完成 Git 基线收口；具备另行创建 Phase 3 分支的前置条件，但本次不创建分支、不实现 Phase 3。 |
 
 ### 1.3 当前正在处理
 
@@ -33,7 +33,7 @@
 2. 已完成页面角色/资源权限矩阵、跨项目 IDOR、软删除对象、POST-only / CSRF、审批失败回显和成员信息边界回归。
 3. 已创建并校验迁移前 PostgreSQL 快照，应用 `audit.0002` 与 `projects.0001`，迁移后综合门禁通过。
 4. 已完成多角色真实浏览器与桌面/移动视口验收，临时数据已精确清理。
-5. 已完成 Phase 2 范围复核、最终本地门禁、主提交、push、stacked Draft PR 与实现 commit 远端 CI；本次只同步远端交付事实，不修改业务实现，也不提前开展 Phase 3。
+5. 已完成 Phase 1 / Phase 2 最终 review、PR 合并、PR #2 base 调整、main push CI 和本地 main fast-forward；未发生 rebase 或 squash。
 
 ### 1.4 高优先级问题闭环状态
 
@@ -57,7 +57,7 @@
 | 验证项 | 最近结果 | 当前结论 |
 | --- | --- | --- |
 | `scripts/check.zsh` | 通过 | 项目专属 `labarchive` Conda 环境、PostgreSQL 测试数据库；Ruff、格式、Django check、migration drift、pytest 和 coverage 全部通过。 |
-| 完整 pytest | 132 项通过，4.01s | Phase 2 主提交前最终工作树复跑结果，包含 Phase 1 回归与当前全部 Phase 2 模型、权限、服务、页面、Admin、命令和并发测试。 |
+| 完整 pytest | 132 项通过，3.65s | PR #2 最终 review 时在当前整合树复跑，包含 Phase 1 回归与当前全部 Phase 2 模型、权限、服务、页面、Admin、命令和并发测试。 |
 | 覆盖率 | 88% | 1715 statements、398 branches；作为当前整合树综合门禁结果。 |
 | Ruff format / check | `ruff check .` 通过；75 个 Python 文件 format check 通过 | 当前整合树完整结果。 |
 | Django system check | 0 issues | 当前整合树通过。 |
@@ -67,15 +67,14 @@
 | 页面安全定向 pytest | 34 项通过，0.96s | 覆盖 SYSTEM_ADMIN 非 LAB_MEMBER、普通非门户 403、IDOR、软删除、CSRF、失败回显、INTERNAL 成员信息边界和只读 Admin。 |
 | UI / 浏览器流程 | 通过 | 实际登录并覆盖申请、失败回显、批准、撤销、INTERNAL 信息边界、SYSTEM_ADMIN 全局 CRUD/软删除、非门户 403；桌面与 390px 移动视口正常，控制台 0 warning/error；临时数据已清理。 |
 | `git diff --check` | 通过 | 最终文档更新后复核通过。 |
-| GitHub Actions | 实现 commit `5c68b403` 的 CI run `32255773119` 通过 | `test` job 完成；远端执行 Ruff、format、migration drift、migration 应用和 pytest/coverage，结论为 success。`taskline.md` 文档 commit 推送后仍需核验 PR 最新 head 的 CI。 |
+| GitHub Actions | PR #1 head `31371151159`、PR #2 head `32256185247`、Phase 1 merge main `32257435132`、Phase 2 merge main `32257797190` 均通过 | 各 `test` job 完成；远端执行 Ruff、format、migration drift、migration 应用和 pytest/coverage，结论均为 success。 |
 
 ### 1.6 下一步执行顺序
 
-1. 提交并推送本次 `taskline.md` 远端事实同步，确认 Draft PR #2 最新 head 的 CI 仍通过。
-2. 等待 Phase 2 Draft PR #2 评审；不要在本任务中合并 Phase 1 或 Phase 2，也不要 rebase、squash 或改变 PR 拓扑。
-3. Phase 1 合并后的 Phase 2 base 调整留给下一任务明确决定，不在当前远端交付收尾中处理。
-4. 只有 Phase 2 变更范围被评审接受且另行确认后，才开始 Phase 3 文件档案系统；不得把项目元数据权限验收写成文件下载链路已完成。
-5. 部署阶段配置外部 `expire_project_access` 调度并验证无人访问时的持续归一化；本地即时失效与人工命令不替代生产调度。
+1. 提交并推送本次 `taskline.md` 收口记录，确认最新 `main` CI 通过并复核本地/远端 main 一致、工作树 clean。
+2. 本次到此停止，不创建 Phase 3 分支，不实现 FileAsset / Document / Upload / Download。
+3. 后续仅在收到新的明确指令后，从最新 `main` 创建 Phase 3 分支；不得把项目元数据权限验收写成文件下载链路已完成。
+4. 部署阶段配置外部 `expire_project_access` 调度并验证无人访问时的持续归一化；本地即时失效与人工命令不替代生产调度。
 
 ## 2. 当前 Phase 工作区详情
 
@@ -123,7 +122,6 @@
 
 ### 2.4 尚未执行
 
-- Phase 2 Draft PR #2 的人工评审与合并决定；
 - Phase 3 文件档案系统及真实下载鉴权；
 - Phase 4 报销业务和附件联合权限；
 - 生产环境外部到期调度器配置与执行验证；
@@ -202,9 +200,9 @@ Phase 2 实现 commit `5c68b403` 中新增：
 
 - `projects.0001` 包含授权血缘与组合约束，`audit.0002` 扩展项目审计动作；migration drift 检查未发现差异；
 - 本机开发库已应用 `audit.0002` 与 `projects.0001`。迁移前快照为 `.local/backups/pre-phase2-20260812-migration.dump`，SHA-256 为 `30d9469b5183cbbc7ad92c4e389f704b3a8237fe4155ba9afe9fbcdf3f9f8b8e`，已由 `pg_restore -l` 校验；
-- 当前分支 `agent/phase-2-projects` 基于 `119e209`；Phase 2 实现 commit 为 `5c68b403`，已推送并跟踪 `origin/agent/phase-2-projects`；
-- [Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 为 Open Draft，base=`agent/phase-1-auth`、head=`agent/phase-2-projects`，实现 commit 远端 CI 已通过但 PR 尚未评审；
-- Phase 1 位于 `agent/phase-1-auth@119e209`，[Draft PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 仍为 Open Draft，尚未合并到 `main@ed1443d`；
+- 当前分支为 `main`；Phase 1 head `119e209`、Phase 2 head `1bef3ce` 及对应实现提交均已成为 `origin/main` 祖先；
+- [PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 已合并，merge commit=`ad3181c`；[PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 已在 base 从 `agent/phase-1-auth` 调整为 `main` 后合并，merge commit=`0fccbb8`；
+- PR #2 整理未 rebase、未 squash；Phase 1 merge commit 保留了 `119e209` 祖先关系，retarget 后三点 diff 仍仅包含原 46 个 Phase 2 文件；
 - Phase 3 尚未开始；真实 FileAsset / Document / 鉴权 Download 联合权限验收仍待 Phase 3。
 
 ## 3. 未闭环的跨 Phase 事项
@@ -219,6 +217,34 @@ Phase 2 实现 commit `5c68b403` 中新增：
 - 服务器部署、TLS、生产配置、备份与恢复演练：当前明确延后，不属于本地 Phase 2 完成条件。
 
 ## 4. 工作历史
+
+### 2026-08-19 — Phase 1 / Phase 2：stacked PR 评审、合并与 Git 基线收口
+
+- 状态：**Phase 1 / Phase 2 最终 review、PR 合并、main CI 与本地 Git 基线收口完成；Phase 3 尚未开始。**
+- 分支：`main`；
+- 提交 / PR：PR #1 head `119e209` → merge commit `ad3181c`；PR #2 head `1bef3ce` → merge commit `0fccbb8`。
+
+#### 完成内容
+
+- 只读核验两条 PR 的 base/head、Draft、mergeability、CI、review submission 和 review thread；两条 PR 均无 review blocker 或未解决 thread；
+- 完成 Phase 1 代码、migration、权限和文档最终审查，以 merge commit 合并 PR #1；
+- 合并后重新 fetch 并核验真实拓扑：`119e209` 同时为最新 main 与 Phase 2 head 的祖先，`origin/main...origin/agent/phase-2-projects` 仍只包含原 Phase 2 变更；
+- 因此仅将 PR #2 base 从 `agent/phase-1-auth` 调整为 `main`，没有 rebase、squash、新功能提交或历史重写；
+- 复核 retarget 后 PR #2 的 46 文件 diff、权限边界、migration、锁序、事务、IDOR/CSRF、账号离组联动和 Phase 2/3 文档边界，未发现 blocker；
+- 以 merge commit 合并 PR #2，并将本地 `main` fast-forward 到合并后的 `origin/main`。
+
+#### 验证结果
+
+- PR #1 head CI run `31371151159` success；Phase 1 merge commit `ad3181c` 的 main CI run `32257435132` success；
+- PR #2 head CI run `32256185247` success；Phase 2 merge commit `0fccbb8` 的 main CI run `32257797190` success；
+- PR #2 最终 review 时复跑 `scripts/check.zsh`：Ruff、75 文件 format、Django check、migration drift、132 项 PostgreSQL pytest（3.65s）和 88% coverage 全部通过；`git diff --check` 通过；
+- `119e209` 与 `1bef3ce` 均已成为 `origin/main` 祖先；最终 Git 状态在本条收口记录推送后再次核验。
+
+#### 边界与下一步
+
+- Phase 3 尚未开始；本次没有创建 Phase 3 分支，也没有实现 FileAsset / Document / Upload / Download；
+- Phase 1 / Phase 2 已具备进入下一阶段的 Git 前置条件，但必须等待新的明确指令后才创建 Phase 3 分支；
+- 外部到期调度器、Docker、第二套环境、服务器部署和恢复演练仍属于后续阶段。
 
 ### 2026-08-19 — Phase 2：远端交付
 
