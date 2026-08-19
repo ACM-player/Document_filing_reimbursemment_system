@@ -98,3 +98,32 @@ def test_discard_only_removes_files_inside_controlled_staging_root(tmp_path):
     with pytest.raises(StorageError):
         storage.discard_staged(outside)
     assert outside.read_bytes() == b"preserve"
+
+
+def test_reconciliation_enumeration_excludes_staging_from_final_keys(tmp_path):
+    storage = _storage(tmp_path)
+    staged = storage.stage_chunks(uuid4(), [b"staging"])
+    final_id = uuid4()
+    final_staged = storage.stage_chunks(final_id, [b"final"])
+    final_key = storage.final_key(uuid4(), final_id, ".pdf")
+    storage.promote(final_staged.path, final_key)
+
+    assert storage.iter_staging_entries() == (staged.path,)
+    assert storage.iter_final_keys() == (final_key,)
+
+
+def test_staging_quarantine_can_compensate_or_purge(tmp_path):
+    storage = _storage(tmp_path)
+    task_id = uuid4()
+    first = storage.stage_chunks(uuid4(), [b"first"])
+
+    quarantined = storage.quarantine_staging_entry(first.path, task_id)
+    assert quarantined.read_bytes() == b"first"
+    assert not first.path.exists()
+    storage.restore_quarantined_staging(quarantined, first.path)
+    assert first.path.read_bytes() == b"first"
+
+    quarantined = storage.quarantine_staging_entry(first.path, task_id)
+    storage.purge_quarantined_staging(quarantined)
+    assert not quarantined.exists()
+    assert not first.path.exists()

@@ -29,6 +29,7 @@ def test_phase_three_file_security_defaults_are_centralized():
     assert settings.LABARCHIVE_ZIP_MAX_COMPRESSION_RATIO > 0
     assert settings.LABARCHIVE_ZIP_MAX_MEMBERS > 0
     assert settings.LABARCHIVE_OOXML_METADATA_MAX_SIZE > 0
+    assert settings.LABARCHIVE_STAGING_MAX_AGE_SECONDS > 0
     assert settings.LABARCHIVE_REQUIRE_MALWARE_SCAN is False
     assert settings.LABARCHIVE_STAGING_ROOT.is_absolute()
 

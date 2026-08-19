@@ -305,6 +305,15 @@ class _DeleteAfterPromoteStorage(ControlledFileStorage):
         return final_path
 
 
+class _TamperAfterPromoteStorage(ControlledFileStorage):
+    def promote(self, staged_path, relative_key):
+        final_path = super().promote(staged_path, relative_key)
+        tampered = PDF_BYTES.replace(b"upload", b"unsafe")
+        assert len(tampered) == len(PDF_BYTES)
+        final_path.write_bytes(tampered)
+        return final_path
+
+
 def test_finalization_quarantines_when_published_file_disappears(upload_context, tmp_path):
     actor, project, category, _ = upload_context
     storage = _storage(tmp_path / "missing-after-move", storage_class=_DeleteAfterPromoteStorage)
@@ -317,6 +326,19 @@ def test_finalization_quarantines_when_published_file_disappears(upload_context,
     assert asset.storage_status == FileStorageStatus.QUARANTINED
     assert asset.status_reason == "final_file_missing"
     assert AuditLog.objects.filter(action=AuditAction.FILE_QUARANTINED).count() == 1
+
+
+def test_finalization_quarantines_same_size_change_after_publish(upload_context, tmp_path):
+    actor, project, category, _ = upload_context
+    storage = _storage(tmp_path / "changed-after-move", storage_class=_TamperAfterPromoteStorage)
+
+    with pytest.raises(DocumentUploadError) as exc_info:
+        _upload(actor=actor, project=project, category=category, storage=storage)
+
+    assert exc_info.value.code == "finalization_failed"
+    asset = FileAsset.objects.get()
+    assert asset.storage_status == FileStorageStatus.QUARANTINED
+    assert asset.status_reason == "final_file_changed"
 
 
 class _ArchiveDuringScan:
@@ -422,3 +444,28 @@ def test_resume_without_staging_or_final_file_commits_quarantine(upload_context)
     asset = FileAsset.objects.get(upload_token=token)
     assert asset.storage_status == FileStorageStatus.QUARANTINED
     assert asset.quarantined_at is not None
+
+
+def test_resume_rejects_symlinked_final_file(upload_context):
+    actor, project, category, storage = upload_context
+
+    with patch(
+        "apps.documents.services.record_audit_event",
+        side_effect=RuntimeError("audit unavailable"),
+    ):
+        with pytest.raises(DocumentUploadError) as exc_info:
+            _upload(actor=actor, project=project, category=category, storage=storage)
+
+    document = Document.all_objects.select_related("file_asset").get(pk=exc_info.value.document.pk)
+    final_path = storage.resolve_final(document.file_asset.relative_path)
+    target = storage.media_root / "safe-target.pdf"
+    target.write_bytes(PDF_BYTES)
+    final_path.unlink()
+    final_path.symlink_to(target)
+
+    with pytest.raises(DocumentUploadError) as resume_error:
+        resume_temporary_upload(actor=actor, document=document, storage=storage)
+
+    assert resume_error.value.code == "unsafe_storage_key"
+    asset = FileAsset.objects.get(pk=document.file_asset_id)
+    assert asset.storage_status == FileStorageStatus.QUARANTINED

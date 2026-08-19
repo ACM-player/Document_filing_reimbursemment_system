@@ -245,7 +245,10 @@ def _initialize_upload(
         uploaded_by=locked_actor,
     )
     try:
-        asset.full_clean()
+        # PostgreSQL is the concurrency authority for the globally unique token.
+        # Model-level uniqueness validation is a racy preflight query and would
+        # turn a legitimate concurrent collision into a generic metadata error.
+        asset.full_clean(exclude={"upload_token"})
         document.full_clean(exclude={"file_asset"})
     except ValidationError:
         _audit_initial_failure(
@@ -440,10 +443,19 @@ def _finalize_upload(
             result=AuditResult.DENIED,
         )
         return document, False
-    final_path = storage.resolve_final(asset.relative_path)
-    if not final_path.is_file():
+    final_failure_reason = ""
+    try:
+        with storage.open_final(asset.relative_path) as final_file:
+            actual_size = final_file.seek(0, 2)
+            actual_sha256 = _sha256_from_open_file(final_file)
+    except StorageError as exc:
+        final_failure_reason = exc.code
+    else:
+        if actual_size != asset.file_size or actual_sha256 != asset.sha256:
+            final_failure_reason = "final_file_changed"
+    if final_failure_reason:
         asset.storage_status = FileStorageStatus.QUARANTINED
-        asset.status_reason = "final_file_missing"
+        asset.status_reason = _status_reason(final_failure_reason)
         asset.quarantined_at = timezone.now()
         asset.save(
             update_fields={
@@ -458,7 +470,7 @@ def _finalize_upload(
             request=http_request,
             actor=locked_actor,
             subject=document,
-            description="最终文件缺失，资产已隔离",
+            description="最终文件缺失或完整性异常，资产已隔离",
             new_value={"reason": asset.status_reason},
         )
         record_audit_event(
@@ -466,7 +478,7 @@ def _finalize_upload(
             request=http_request,
             actor=locked_actor,
             subject=document,
-            description="最终文件不存在，上传保持隔离",
+            description="最终文件未通过发布后复核，上传保持隔离",
             new_value={"reason": asset.status_reason},
             result=AuditResult.FAILED,
         )
@@ -646,30 +658,47 @@ def resume_temporary_upload(
             document=current,
         )
 
-    final_path = active_storage.resolve_final(asset.relative_path)
     staging_path = active_storage.staging_path(asset.pk)
-    candidate = final_path if final_path.is_file() else staging_path
-    if not candidate.is_file():
+    validation_copy = None
+    final_exists = False
+    try:
+        try:
+            with active_storage.open_final(asset.relative_path) as candidate_file:
+                final_exists = True
+                validation_copy = active_storage.stage_chunks(
+                    uuid4(),
+                    iter(lambda: candidate_file.read(1024 * 1024), b""),
+                )
+        except StorageError as final_error:
+            if final_error.code != "final_file_missing":
+                raise
+            with active_storage.open_staged(staging_path) as candidate_file:
+                validation_copy = active_storage.stage_chunks(
+                    uuid4(),
+                    iter(lambda: candidate_file.read(1024 * 1024), b""),
+                )
+    except StorageError as exc:
+        reason = "temporary_file_missing" if exc.code == "staging_file_missing" else exc.code
         _quarantine_upload(
             actor=actor,
             document_id=current.pk,
-            reason="temporary_file_missing",
+            reason=reason,
             http_request=http_request,
         )
         _raise_upload_failure(
-            "temporary_file_missing",
-            "上传恢复时没有找到受控临时文件或最终文件。",
+            reason,
+            "上传恢复时没有找到可安全读取的临时文件或最终文件。",
             current,
         )
 
     try:
         validated = validate_staged_file(
-            candidate,
+            validation_copy.path,
             asset.original_filename,
             expected_size=asset.file_size,
             expected_sha256=asset.sha256 or None,
         )
-        scan_result = scan_file(candidate, scanner)
+        scan_result = scan_file(validation_copy.path, scanner)
         if not scan_allows_release(scan_result):
             _quarantine_upload(
                 actor=actor,
@@ -697,8 +726,10 @@ def resume_temporary_upload(
                 "恢复上传时权限或项目状态已变化。",
                 current,
             )
-        if not final_path.is_file():
-            active_storage.promote(staging_path, asset.relative_path)
+        if not final_exists:
+            active_storage.promote(validation_copy.path, asset.relative_path)
+            validation_copy = None
+            active_storage.discard_staged(staging_path)
         current, finalized = _finalize_upload(
             actor=actor,
             document_id=current.pk,
@@ -730,6 +761,9 @@ def resume_temporary_upload(
             "上传恢复再次中断，记录仍保持可恢复状态。",
             document=current,
         ) from exc
+    finally:
+        if validation_copy is not None:
+            active_storage.discard_staged(validation_copy.path)
     raise AssertionError("unreachable")
 
 

@@ -58,6 +58,10 @@ class ControlledFileStorage:
                 "临时目录与最终目录必须位于同一文件系统。",
             )
 
+    @property
+    def reconciliation_quarantine_root(self) -> Path:
+        return self.staging_root / ".reconciliation-quarantine"
+
     def staging_path(self, asset_id: UUID) -> Path:
         return self.staging_root / f"{asset_id.hex}.part"
 
@@ -98,6 +102,23 @@ class ControlledFileStorage:
         if not stat.S_ISREG(metadata.st_mode):
             os.close(descriptor)
             raise StorageError("final_file_not_regular", "最终文件不是普通文件。")
+        return os.fdopen(descriptor, "rb")
+
+    def open_staged(self, staged_path: Path):
+        candidate = Path(staged_path)
+        if candidate.parent.resolve() != self.staging_root or candidate.is_symlink():
+            raise StorageError("invalid_staging_file", "临时文件不属于受控 staging 或是链接。")
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(candidate, flags)
+        except FileNotFoundError as exc:
+            raise StorageError("staging_file_missing", "临时文件不存在。") from exc
+        except OSError as exc:
+            raise StorageError("staging_file_unreadable", "临时文件不可安全读取。") from exc
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            os.close(descriptor)
+            raise StorageError("invalid_staging_file", "临时文件不是普通文件。")
         return os.fdopen(descriptor, "rb")
 
     def stage_chunks(self, asset_id: UUID, chunks: Iterable[bytes]) -> StagedFile:
@@ -143,9 +164,72 @@ class ControlledFileStorage:
         return destination
 
     def discard_staged(self, staged_path: Path) -> bool:
-        path = Path(staged_path).resolve()
-        if path.parent != self.staging_root:
+        path = Path(staged_path)
+        if path.parent.resolve() != self.staging_root or path.name in {"", ".", ".."}:
             raise StorageError("invalid_staging_file", "临时文件不属于受控 staging 目录。")
+        if path.exists() and path.is_dir() and not path.is_symlink():
+            raise StorageError("invalid_staging_file", "临时文件不能是目录。")
         existed = path.exists()
         path.unlink(missing_ok=True)
         return existed
+
+    def iter_staging_entries(self) -> tuple[Path, ...]:
+        if not self.staging_root.exists():
+            return ()
+        return tuple(
+            sorted(
+                (
+                    entry
+                    for entry in self.staging_root.iterdir()
+                    if entry != self.reconciliation_quarantine_root
+                ),
+                key=lambda entry: entry.name,
+            )
+        )
+
+    def iter_final_keys(self) -> tuple[str, ...]:
+        if not self.media_root.exists():
+            return ()
+        keys = []
+        for entry in self.media_root.rglob("*"):
+            if entry.is_relative_to(self.staging_root):
+                continue
+            if entry.is_file() or entry.is_symlink():
+                keys.append(entry.relative_to(self.media_root).as_posix())
+        return tuple(sorted(keys))
+
+    def quarantine_staging_entry(self, staged_path: Path, task_id: UUID) -> Path:
+        self.ensure_roots()
+        source = Path(staged_path)
+        if source.parent.resolve() != self.staging_root or source.name in {"", ".", ".."}:
+            raise StorageError("invalid_staging_file", "临时文件不属于受控 staging 目录。")
+        if not source.exists() and not source.is_symlink():
+            raise StorageError("staging_file_missing", "待清理临时文件不存在。")
+        if source.is_dir() and not source.is_symlink():
+            raise StorageError("invalid_staging_file", "临时文件不能是目录。")
+        task_root = self.reconciliation_quarantine_root / task_id.hex
+        task_root.mkdir(mode=0o750, parents=True, exist_ok=True)
+        destination = task_root / source.name
+        if destination.exists() or destination.is_symlink():
+            raise StorageError("staging_quarantine_exists", "核对隔离目标已存在。")
+        os.replace(source, destination)
+        return destination
+
+    def restore_quarantined_staging(self, quarantined_path: Path, original_path: Path) -> None:
+        source = Path(quarantined_path)
+        destination = Path(original_path)
+        if not source.parent.resolve().is_relative_to(
+            self.reconciliation_quarantine_root.resolve()
+        ):
+            raise StorageError("invalid_quarantine_file", "文件不属于核对隔离目录。")
+        if destination.parent.resolve() != self.staging_root:
+            raise StorageError("invalid_staging_file", "恢复目标不属于受控 staging 目录。")
+        if destination.exists() or destination.is_symlink():
+            raise StorageError("staging_file_exists", "恢复目标已存在。")
+        os.replace(source, destination)
+
+    def purge_quarantined_staging(self, quarantined_path: Path) -> None:
+        path = Path(quarantined_path)
+        if not path.parent.resolve().is_relative_to(self.reconciliation_quarantine_root.resolve()):
+            raise StorageError("invalid_quarantine_file", "文件不属于核对隔离目录。")
+        path.unlink(missing_ok=True)
