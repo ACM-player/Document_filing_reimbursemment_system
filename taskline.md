@@ -8,11 +8,11 @@
 
 ### 1.1 当前开发阶段
 
-- 当前 Phase：Phase 1 / Phase 2 交付收口完成；Phase 3 的 CP0–CP4 均已完成；下一检查点为 CP5 软删除与恢复；
-- 当前状态：**Phase 1 / Phase 2 已合并并完成独立范围本地验收及远端 CI；Phase 3 已完成架构、模型/权限、安全文件基础设施、可恢复上传 saga 和鉴权下载，并通过 239 项 PostgreSQL 全量回归；回收站和 UI 尚未实现。**
+- 当前 Phase：Phase 1 / Phase 2 交付收口完成；Phase 3 的 CP0–CP4 均已完成；CP5 存在中断时留下的未提交部分实现，尚未形成 checkpoint；
+- 当前状态：**Phase 1 / Phase 2 已合并并完成独立范围本地验收及远端 CI；Phase 3 的 CP0–CP4 已完成并通过 239 项 PostgreSQL 全量回归；CP5 软删除/恢复服务只有未提交、未完成复验的工作树草稿，不能标记完成。**
 - 当前 Git 分支：`agent/phase-3-files`，基线为最新 `main` `a203107c44ef9870161a49893de85959af4d77e2`；
 - Phase 2 实现 commit：`5c68b403 feat(projects): complete phase two project system`，父提交为 Phase 1 的 `119e209`；
-- 工作树：CP0 已提交为 `b079cb6`，CP1 实现为 `ccf191f`，CP2 实现为 `69a0055`，CP3 实现为 `b4038fa`，CP4 实现为 `432f753`；最终状态以 `git status` 为准；
+- 工作树：本条现场恢复记录将作为独立 docs checkpoint 提交，其父提交为 CP4 交接 `5d65906`；提交后 index clean；`apps/documents/services.py` 有未暂存 CP5 修改，`tests/test_document_lifecycle_services.py` 为未跟踪 CP5 测试草稿；工作树不 clean；
 - 远端状态：Phase 1 / Phase 2 分支提交及两个 merge commit 均已进入 `origin/main`；`main`、`origin/main` 与 Phase 3 分支起点均为 `a203107`；Phase 3 分支尚未推送；
 - PR：[PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 已以 merge commit `ad3181c` 合并；[PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 已在 base 调整为 `main` 后以 merge commit `0fccbb8` 合并；
 - GitHub Actions：PR #1 head CI `31371151159`、PR #2 head CI `32256185247`、Phase 1 merge 后 main CI `32257435132`、Phase 2 merge 后 main CI `32257797190`、最新 main 收口 CI `32258148559` 均为 success；
@@ -38,7 +38,8 @@
 6. CP2 已实现受控 staging/最终 key、流式大小与 SHA256、类型检测、ZIP/OOXML 安全校验和生产扫描 fail-closed 配置。
 7. CP3 已实现持久化 TEMPORARY 意图、两次锁后鉴权、安全门禁、原子发布、隔离/失败审计、幂等 replay 和中断恢复。
 8. CP4 已实现受控鉴权下载、安全响应头、物理存在性/元数据异常 fail-closed、MISSING 转换和真实文件权限/IDOR 联合验收。
-9. 下一原子 checkpoint 为 CP5 文档软删除、回收站查询与安全恢复服务。
+9. CP5 已出现未提交的软删除、回收站查询与恢复服务草稿及测试草稿；它们不属于 CP4，也未形成可接受 checkpoint。
+10. 下一线程必须先审计这两处 CP5 残留，再由用户决定保留续做或丢弃；不得把当前工作树误当作 CP3/CP4 clean checkpoint。
 
 ### 1.4 高优先级问题闭环状态
 
@@ -85,9 +86,9 @@ Phase 3 文档工作树的新测试结果。
 
 ### 1.6 下一步执行顺序
 
-1. 进入 CP5，实现权限对称的文档软删除、回收站查询与恢复服务；不物理删除字节。
-2. 恢复必须重新锁后鉴权并复核项目状态、物理文件、安全校验和 SHA256；缺失转 MISSING，安全失败转 QUARANTINED。
-3. CP5 不实现永久删除、完整档案 UI 或 Phase 4 报销附件。
+1. 新线程先从 `HEAD=5d65906` 审计未提交 CP5 残留：`apps/documents/services.py` 与 `tests/test_document_lifecycle_services.py`。
+2. 当前 index clean，但 working tree 不 clean；未经明确决定不得提交或丢弃这两处残留。
+3. 若保留并继续 CP5，必须重新审查实现并从当前树重跑定向/完整门禁；此前 12 项测试结果发生在服务文件最后一次修改之前，不能作为当前树验收。
 4. 部署阶段仍需配置外部 `expire_project_access` 调度；本地即时失效与人工命令不替代生产调度。
 
 ### 1.7 Phase 3 当前 checkpoint
@@ -106,6 +107,9 @@ Phase 3 文档工作树的新测试结果。
 - CP4：**完成并完成 PostgreSQL 验证**；实现受控 Django 下载 endpoint/service、每次锁后重新鉴权、
   安全 Content-Disposition、服务器生成路径隔离、物理文件/软链接/元数据异常 fail-closed、MISSING
   转换、下载审计和 INTERNAL / RESTRICTED / VIEWER / SYSTEM_ADMIN / 无权限 / UUID IDOR 真实字节验收。
+- CP5：**未完成，存在未提交中断残留**；服务文件约 398 行新增/5 行修改，另有未跟踪生命周期测试草稿。
+  草稿曾有 12 项定向测试通过，但服务随后又发生修改且未复验，因此当前树不得引用该结果作为验收。
+- CP6–CP7：**尚未开始**；没有实现或验证证据。
 - CP0 验证：`git diff --check`、Markdown fence、ADR 相对链接和当前状态关键词检查通过。
 - CP1 验证：32 项定向测试通过；完整门禁为 Ruff、79 文件 format、Django check、migration drift、
   164 项 PostgreSQL pytest（4.09s）和 88% coverage 全部通过；本机迁移已应用。
@@ -115,6 +119,7 @@ Phase 3 文档工作树的新测试结果。
   migration drift、226 项 PostgreSQL pytest（4.56s）和 88% coverage 全部通过。
 - CP4 验证：51 项 PostgreSQL 定向测试通过；完整门禁为 Ruff、90 文件 format、Django check、
   migration drift、239 项 PostgreSQL pytest（5.66s）和 89% coverage 全部通过。
+- 当前 CP5 残留：最后一次修改后未运行测试、Ruff、format、Django check、migration drift 或完整回归。
 
 ## 2. 当前 Phase 工作区详情
 
@@ -292,6 +297,15 @@ Phase 2 实现 commit `5c68b403` 中新增：
 - 服务器部署、TLS、生产配置、备份与恢复演练：当前明确延后，不属于本地 Phase 2 完成条件。
 
 ## 4. 工作历史
+
+### 2026-08-19 — Goal 异常清除后的现场恢复
+
+- 用户报告 CP3 后设置的长时间 Goal 疑似未正常启动并已人工清除；该事件是任务编排状态异常，**不是代码失败或测试失败**。
+- 现场 Git 事实为：分支 `agent/phase-3-files`，HEAD=`5d65906`，无 upstream；CP3 的 `b4038fa` / `e21f739` 均为当前 HEAD 祖先，CP4 的 `432f753` / `5d65906` 也已真实提交。
+- CP3 交接提交中的 16 项定向 PostgreSQL 测试和 226 项全量回归记录与 Git 中的 `taskline.md` 一致；本次恢复未为形式重复运行它们。
+- 当前 index clean，但 working tree 不 clean：`apps/documents/services.py` 有未暂存 CP5 修改，`tests/test_document_lifecycle_services.py` 是未跟踪 CP5 测试草稿；没有 staged 文件。
+- CP5 草稿在较早状态曾运行 12 项定向 PostgreSQL 测试并通过，之后 `apps/documents/services.py` 又发生修改；本次恢复未运行当前树测试、Ruff、format、Django check、migration drift 或完整回归，因此 CP5 仍为未验证、未提交、未完成状态。
+- 本次只更新交接事实，不继续 CP5，不提交或丢弃残留代码；下一线程必须先审计残留并取得用户对“保留续做或丢弃”的明确决定。
 
 ### 2026-08-19 — Phase 3 CP4：受控鉴权下载
 
