@@ -9,14 +9,14 @@
 ### 1.1 当前开发阶段
 
 - 当前 Phase：Phase 2 — 项目系统；
-- 当前状态：**Phase 2 可独立实现范围本地验收完成；真实文件下载联合权限验收待 Phase 3；远端提交、CI 与评审待办。**
+- 当前状态：**Phase 2 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR #2 待评审；真实文件下载联合权限验收待 Phase 3；Phase 3 尚未开始。**
 - 当前 Git 分支：`agent/phase-2-projects`；
-- 当前基线 commit：`119e209 docs: add task progress log`；
-- 未提交修改：**存在**。共 18 个已跟踪文件被修改（含 `Line.md` 和本文件）、28 个未跟踪文件，暂存区为空；
-- 远端状态：当前分支未推送、没有 upstream；
-- PR：当前分支没有 PR。Phase 1 的 Draft PR #1 仍未合并；
-- 远端交付 blocker：本机未安装 GitHub CLI（`gh: command not found`）。发布工作流要求先验证 `gh auth status`，因此本线程没有 staging、commit、push 或创建 PR；
-- 主分支状态：本次审计时本地和远端 `main` 均位于 `ed1443d`。
+- Phase 2 实现 commit：`5c68b403 feat(projects): complete phase two project system`，父提交为 Phase 1 的 `119e209`；
+- 工作树：Phase 2 业务实现、测试、migration 与交付文档均已提交；本次远端事实同步使用单独的 `taskline.md` 文档 commit，最终状态以 `git status` 为准；
+- 远端状态：已推送并跟踪 `origin/agent/phase-2-projects`，实现 commit 与远端一致；
+- PR：[Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2)，base=`agent/phase-1-auth`，head=`agent/phase-2-projects`，当前 Open Draft、待评审；
+- GitHub Actions：实现 commit `5c68b403` 对应 [CI run 32255773119](https://github.com/ACM-player/Document_filing_reimbursemment_system/actions/runs/32255773119) 已通过；
+- Phase 1 的 Draft PR #1 仍为 Open Draft，尚未合并；远端 `main` 仍位于 `ed1443d`。
 
 ### 1.2 各阶段状态
 
@@ -24,8 +24,8 @@
 | --- | --- | --- |
 | Phase 0 | 本地验证完成；跨环境验收待办 | 本机 Conda + PostgreSQL 工程路径已验证；Docker 和第二套完整环境仍未闭环，不能标记为全部完成。 |
 | Phase 1 | 本地验证完成、CI 验证完成；跨阶段验收部分完成 | 账号、认证、系统角色和审计核心范围已实现；Phase 2 项目级权限联动已本地验收，真实项目文件下载待 Phase 3，报销附件联动待 Phase 4；Draft PR #1 未合并。 |
-| Phase 2 | 可独立实现范围本地验收完成；真实文件下载联合权限验收待 Phase 3；远端提交、CI 与评审待办 | 项目元数据、可见性、成员、访问申请及项目级权限决策已完成本地验收；132 项 PostgreSQL 综合测试、五条真实事务并发链、迁移应用及多角色浏览器流程通过。真实 Document / FileAsset 下载链路不属于本阶段已有证据，工作树尚未提交或推送，Phase 2 CI 和 PR 评审未执行。 |
-| Phase 3–10 | 未开始 | Phase 2 本地门禁已通过；仍应先完成当前分支提交、远端 CI 与评审，再按路线进入 Phase 3。 |
+| Phase 2 | 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR 待评审；真实文件下载联合权限验收待 Phase 3 | 项目元数据、可见性、成员、访问申请及项目级权限决策已通过 132 项 PostgreSQL 综合测试、五条真实事务并发链、migration、多角色浏览器流程和实现 commit 远端 CI；Draft PR #2 尚未评审。真实 Document / FileAsset 下载链路不属于本阶段已有证据。 |
+| Phase 3–10 | 未开始 | Phase 2 Draft PR 等待评审；Phase 1 / Phase 2 PR 拓扑调整或合并必须另行决定，当前不提前进入 Phase 3。 |
 
 ### 1.3 当前正在处理
 
@@ -33,7 +33,7 @@
 2. 已完成页面角色/资源权限矩阵、跨项目 IDOR、软删除对象、POST-only / CSRF、审批失败回显和成员信息边界回归。
 3. 已创建并校验迁移前 PostgreSQL 快照，应用 `audit.0002` 与 `projects.0001`，迁移后综合门禁通过。
 4. 已完成多角色真实浏览器与桌面/移动视口验收，临时数据已精确清理。
-5. 本次只进行需求基线一致性修订和文档复核；不修改业务实现，也不提前开展 Phase 3。
+5. 已完成 Phase 2 范围复核、最终本地门禁、主提交、push、stacked Draft PR 与实现 commit 远端 CI；本次只同步远端交付事实，不修改业务实现，也不提前开展 Phase 3。
 
 ### 1.4 高优先级问题闭环状态
 
@@ -57,7 +57,7 @@
 | 验证项 | 最近结果 | 当前结论 |
 | --- | --- | --- |
 | `scripts/check.zsh` | 通过 | 项目专属 `labarchive` Conda 环境、PostgreSQL 测试数据库；Ruff、格式、Django check、migration drift、pytest 和 coverage 全部通过。 |
-| 完整 pytest | 132 项通过，3.97s | 最终文档与页面展示修改后的完整工作树结果，包含 Phase 1 回归与当前全部 Phase 2 模型、权限、服务、页面、Admin、命令和并发测试。 |
+| 完整 pytest | 132 项通过，4.01s | Phase 2 主提交前最终工作树复跑结果，包含 Phase 1 回归与当前全部 Phase 2 模型、权限、服务、页面、Admin、命令和并发测试。 |
 | 覆盖率 | 88% | 1715 statements、398 branches；作为当前整合树综合门禁结果。 |
 | Ruff format / check | `ruff check .` 通过；75 个 Python 文件 format check 通过 | 当前整合树完整结果。 |
 | Django system check | 0 issues | 当前整合树通过。 |
@@ -67,21 +67,21 @@
 | 页面安全定向 pytest | 34 项通过，0.96s | 覆盖 SYSTEM_ADMIN 非 LAB_MEMBER、普通非门户 403、IDOR、软删除、CSRF、失败回显、INTERNAL 成员信息边界和只读 Admin。 |
 | UI / 浏览器流程 | 通过 | 实际登录并覆盖申请、失败回显、批准、撤销、INTERNAL 信息边界、SYSTEM_ADMIN 全局 CRUD/软删除、非门户 403；桌面与 390px 移动视口正常，控制台 0 warning/error；临时数据已清理。 |
 | `git diff --check` | 通过 | 最终文档更新后复核通过。 |
-| GitHub Actions | Phase 2 未运行 | 当前分支尚未提交或推送；不能用本地门禁替代远端 CI。 |
+| GitHub Actions | 实现 commit `5c68b403` 的 CI run `32255773119` 通过 | `test` job 完成；远端执行 Ruff、format、migration drift、migration 应用和 pytest/coverage，结论为 success。`taskline.md` 文档 commit 推送后仍需核验 PR 最新 head 的 CI。 |
 
 ### 1.6 下一步执行顺序
 
-1. 安装 GitHub CLI，完成 `gh auth login`，并用 `gh auth status` 验证对 `ACM-player/Document_filing_reimbursemment_system` 的访问；不要在此之前 staging 或 commit。
-2. 重新核对完整 Phase 2 diff 后显式暂存本快照中的 17 个 tracked 修改和 28 个 untracked 文件，提交并推送 `agent/phase-2-projects`。
-3. Phase 1 尚未合并时，Phase 2 Draft PR 应以 `agent/phase-1-auth` 为 base，避免把 Phase 1 差异重复计入；Phase 1 合并后再切换/重建到 `main`，并等待远端 CI 和评审。
-4. 只有远端交付结果稳定且 Phase 2 变更范围被接受后，才开始 Phase 3 文件档案系统；不得把项目元数据权限验收写成文件下载链路已完成。
+1. 提交并推送本次 `taskline.md` 远端事实同步，确认 Draft PR #2 最新 head 的 CI 仍通过。
+2. 等待 Phase 2 Draft PR #2 评审；不要在本任务中合并 Phase 1 或 Phase 2，也不要 rebase、squash 或改变 PR 拓扑。
+3. Phase 1 合并后的 Phase 2 base 调整留给下一任务明确决定，不在当前远端交付收尾中处理。
+4. 只有 Phase 2 变更范围被评审接受且另行确认后，才开始 Phase 3 文件档案系统；不得把项目元数据权限验收写成文件下载链路已完成。
 5. 部署阶段配置外部 `expire_project_access` 调度并验证无人访问时的持续归一化；本地即时失效与人工命令不替代生产调度。
 
 ## 2. 当前 Phase 工作区详情
 
 ### 2.1 已完成并验证
 
-这里的“完成并验证”只表示 Phase 2 可独立实现范围的本地实现与验收已经得到当前工作树证据；不表示真实文件下载联合权限验收、远端 CI、PR 评审或后续 Phase 已完成。
+这里的“完成并验证”表示 Phase 2 可独立实现范围已有本地实现、验收及实现 commit 远端 CI 证据；不表示真实文件下载联合权限验收、PR 评审或后续 Phase 已完成。
 
 - 已建立 Phase 2 的 PostgreSQL 自动化测试基础；当前工作树综合门禁 132 项通过、覆盖率 88%，包含 Phase 1 回归及现有全部 Phase 2 自动化用例。
 - 已验证现有权限函数不会因为 `REIMBURSEMENT_ADMIN` 系统角色而自动授予 RESTRICTED 项目访问权。
@@ -100,7 +100,7 @@
 - Phase 1 回归已包含在 132 项完整 PostgreSQL pytest 中并重新通过。
 - 最终文档与页面展示修改后，完整 Ruff、格式、Django check、migration drift、132 项 pytest、coverage 和 `git diff --check` 均已再次通过。
 
-### 2.2 已实现并本地验收，但尚未提交
+### 2.2 已提交并通过实现 commit 远端 CI
 
 - `ProjectType`、`Project`、`ProjectMembership`、`ProjectAccessRequest` 模型、精确授权血缘和首版约束；
 - INTERNAL / RESTRICTED 可见性和 PLANNING / ACTIVE / PAUSED / COMPLETED / ARCHIVED 状态；
@@ -123,7 +123,7 @@
 
 ### 2.4 尚未执行
 
-- Phase 2 工作树的提交、推送、GitHub Actions、正式 PR 和评审；
+- Phase 2 Draft PR #2 的人工评审与合并决定；
 - Phase 3 文件档案系统及真实下载鉴权；
 - Phase 4 报销业务和附件联合权限；
 - 生产环境外部到期调度器配置与执行验证；
@@ -141,12 +141,12 @@
 - 当前页面角色/资源矩阵、写端点越权、跨项目 UUID / IDOR、软删除、CSRF 和审批失败回显已有自动化回归。
 - 同一用户多轮申请、撤销旧申请、旧申请到期、直接晋升、普通移除、账号离组、Admin POST、到期命令和五条并发链均有 PostgreSQL 证据。
 - 浏览器已覆盖 Phase 2 核心多角色流程，但不是穷举所有表单字段组合；自动化测试承担完整边界回归。
-- Phase 2 未运行远端 CI，也未验证 Docker 或第二套全新环境。
+- Phase 2 实现 commit 已通过远端 CI，但仍未验证 Docker 或第二套全新环境。
 - Phase 3 文件下载 URL、旧 Session 下载、文件类型与物理文件异常测试尚未开始，不能计入本阶段覆盖。
 
 ### 2.7 当前新增 / 修改的重要文件
 
-已修改且未提交：
+Phase 2 实现 commit `5c68b403` 中修改：
 
 - `Line.md`
 - `README.md`
@@ -167,7 +167,7 @@
 - `tests/test_accounts_admin.py`
 - `taskline.md`
 
-未跟踪：
+Phase 2 实现 commit `5c68b403` 中新增：
 
 - `apps/audit/migrations/0002_alter_auditlog_action.py`
 - `apps/projects/forms.py`
@@ -202,9 +202,10 @@
 
 - `projects.0001` 包含授权血缘与组合约束，`audit.0002` 扩展项目审计动作；migration drift 检查未发现差异；
 - 本机开发库已应用 `audit.0002` 与 `projects.0001`。迁移前快照为 `.local/backups/pre-phase2-20260812-migration.dump`，SHA-256 为 `30d9469b5183cbbc7ad92c4e389f704b3a8237fe4155ba9afe9fbcdf3f9f8b8e`，已由 `pg_restore -l` 校验；
-- 当前分支 `agent/phase-2-projects` 基于 `119e209`，没有 upstream、未推送、没有 PR；
-- 暂存区为空，全部 Phase 2 实现、测试、迁移和文档均未提交；
-- Phase 1 位于 `agent/phase-1-auth`，已推送至 Draft PR #1，但尚未合并到 `main`。
+- 当前分支 `agent/phase-2-projects` 基于 `119e209`；Phase 2 实现 commit 为 `5c68b403`，已推送并跟踪 `origin/agent/phase-2-projects`；
+- [Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 为 Open Draft，base=`agent/phase-1-auth`、head=`agent/phase-2-projects`，实现 commit 远端 CI 已通过但 PR 尚未评审；
+- Phase 1 位于 `agent/phase-1-auth@119e209`，[Draft PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 仍为 Open Draft，尚未合并到 `main@ed1443d`；
+- Phase 3 尚未开始；真实 FileAsset / Document / 鉴权 Download 联合权限验收仍待 Phase 3。
 
 ## 3. 未闭环的跨 Phase 事项
 
@@ -218,6 +219,36 @@
 - 服务器部署、TLS、生产配置、备份与恢复演练：当前明确延后，不属于本地 Phase 2 完成条件。
 
 ## 4. 工作历史
+
+### 2026-08-19 — Phase 2：远端交付
+
+- 状态：**Phase 2 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR #2 待评审；真实文件下载联合权限验收待 Phase 3；Phase 3 尚未开始。**
+- 分支：`agent/phase-2-projects`，upstream=`origin/agent/phase-2-projects`；
+- 提交 / PR：`5c68b403 feat(projects): complete phase two project system`；[Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2)，base=`agent/phase-1-auth`、head=`agent/phase-2-projects`。
+
+#### 完成内容
+
+- 复核 46 个 Phase 2 提交文件（28 个新增、18 个修改，6807 行新增、86 行删除），未发现 Secret、备份、截图、数据库 dump、缓存、Phase 3 实现或无关文件；
+- 使用显式路径暂存并形成 Phase 2 主提交，不重写 Phase 1 历史；分支已推送并设置 upstream；
+- GitHub CLI 2.97.0 通过 `dev_app` 环境调用，`ACM-player` 认证有效且具有 `repo` / `workflow` scopes，仓库权限为 ADMIN；
+- GitHub App 创建 PR 因 installation 权限返回 `403 Resource not accessible by integration`，按发布技能回退到 `conda run -n dev_app gh pr create` 后成功创建 stacked Draft PR #2；
+- 核验 PR #2 为 Open Draft、可合并，head 为 `5c68b403`；Phase 1 Draft PR #1 仍未合并。
+
+#### 验证结果
+
+- 主提交前最终 `scripts/check.zsh`：Ruff、75 文件 format、Django check、migration drift、132 项 PostgreSQL pytest（4.01s）和 88% coverage 全部通过；`git diff --check` 通过；
+- 实现 commit `5c68b403` 对应 [GitHub Actions CI run 32255773119](https://github.com/ACM-player/Document_filing_reimbursemment_system/actions/runs/32255773119) 成功；`test` job 的 Ruff、format、migration drift、migration 应用及 pytest/coverage steps 全部通过；
+- 本条记录作为单独文档 commit 推送后，仍需确认 PR 最新 head 的 CI；最终结果以 PR checks 与交付报告为准。
+
+#### 未完成 / 遗留边界
+
+- Draft PR #2 尚未评审或合并；本任务不合并 Phase 1 / Phase 2，不 rebase、squash 或调整 PR base；
+- Phase 3 尚未开始，真实 FileAsset / Document / 鉴权 Download 的联合权限验收仍待 Phase 3；
+- 外部到期调度器、Docker、第二套环境、服务器部署和恢复演练仍属于后续阶段。
+
+#### 下一步
+
+提交并推送本次 `taskline.md` 同步，确认最新 head CI 通过后停止；后续先处理 PR 评审与 stacked 分支拓扑，再另行决定是否进入 Phase 3。
 
 ### 2026-08-12 — 需求基线一致性修订
 
