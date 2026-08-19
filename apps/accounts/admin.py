@@ -13,7 +13,7 @@ from apps.audit.services import record_audit_event
 
 from .forms import LabArchiveUserChangeForm, LabArchiveUserCreationForm
 from .models import User, UserProfile
-from .services import reset_temporary_password, sync_staff_flag
+from .services import change_user_status, reset_temporary_password, sync_staff_flag
 
 
 class UserProfileInline(admin.StackedInline):
@@ -134,13 +134,17 @@ class LabArchiveUserAdmin(UserAdmin):
         response["Pragma"] = "no-cache"
         return response
 
+    @transaction.atomic
     def save_model(self, request, obj, form, change):
         old_status = None
+        requested_status = obj.account_status
         if change:
             old_status = User.objects.only("account_status").get(pk=obj.pk).account_status
             request._labarchive_old_roles = set(
                 User.objects.get(pk=obj.pk).groups.values_list("name", flat=True)
             )
+            if old_status != requested_status:
+                obj.account_status = old_status
         super().save_model(request, obj, form, change)
         if not change:
             record_audit_event(
@@ -151,16 +155,15 @@ class LabArchiveUserAdmin(UserAdmin):
                 description="系统管理员创建用户",
                 new_value={"account_status": obj.account_status},
             )
-        elif old_status != obj.account_status:
-            record_audit_event(
-                action=AuditAction.USER_STATUS_CHANGED,
-                request=request,
+        elif old_status != requested_status:
+            changed_user = change_user_status(
+                user=obj,
+                new_status=requested_status,
                 actor=request.user,
-                subject=obj,
-                description="系统管理员修改账号状态",
-                old_value={"account_status": old_status},
-                new_value={"account_status": obj.account_status},
+                request=request,
             )
+            obj.account_status = changed_user.account_status
+            obj.is_active = changed_user.is_active
 
     def save_related(self, request, form, formsets, change):
         with transaction.atomic():

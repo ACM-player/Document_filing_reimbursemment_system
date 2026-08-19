@@ -4,9 +4,10 @@
 
 ---
 
-> 文档状态：需求与架构基线（进入 Phase 0 前）
-> 最近修订：2026-08-10
-> 本次修订重点：统一 V1 范围，补充自定义用户模型、文件资产、状态流转、安全下载、持续审计以及一致性备份恢复要求。
+> 文档状态：需求、架构与 Phase 验收基线
+> 实际开发进度与验证状态：见 `taskline.md`
+> 最近修订：2026-08-12
+> 本次修订重点：校准 Phase 2 与 Phase 3 的验收边界，不改变既有业务需求和架构设计。
 > 对应远端github仓库为：https://github.com/ACM-player/Document_filing_reimbursemment_system.git
 
 ---
@@ -2525,7 +2526,7 @@ Session 安全策略
 - 连续登录失败触发限制且不泄露账号是否存在
 - 登录、退出、密码和角色操作产生脱敏审计记录
 
-当前实现状态（2026-08-10）：Phase 1 的账号与认证范围已在本地 PostgreSQL 17 完成并通过自动化测试。项目模型尚未进入开发，因此“报销管理员不能因角色访问受限项目档案”和项目页面授权的联动验收保留到 Phase 2；不能用 Phase 1 的系统角色测试替代项目级权限测试。执行证据见 `docs/PHASE1_REPORT.md`。
+跨阶段验收边界：Phase 1 先验证预定义系统角色本身不会自动授予 `RESTRICTED` 项目访问资格；Project、ProjectMembership 和 ProjectAccessRequest 存在后，在 Phase 2 执行项目级权限决策的联合验收；Document、FileAsset 和鉴权 Download 存在后，在 Phase 3 使用真实文件执行下载边界的联合验收。不能用系统角色测试替代项目级权限测试，也不能用项目级权限测试替代真实文件下载测试。实际开发进度与验证状态见 `taskline.md`，Phase 1 执行证据见 `docs/PHASE1_REPORT.md`。
 
 ---
 
@@ -2546,13 +2547,18 @@ Session 安全策略
 
 验收：
 
-所有正常登录成员可以查看、下载 `INTERNAL` 项目文件，但不能仅凭内部可见性上传或修改。
+- 所有 `ACTIVE` 状态、正常登录的课题组成员可以查看 `INTERNAL` 项目元数据，并由统一的项目级权限决策认定为具有项目档案内部只读资格；`INTERNAL` 可见性本身不能授予上传、修改、删除、管理分类或管理成员等写权限。
+- `RESTRICTED` 项目的完整元数据和项目档案读取资格只允许项目成员、获批申请人和系统管理员获得；未获授权的正常成员只能看到最小目录信息和访问申请入口。
+- ProjectMembership 与 ProjectAccessRequest 的创建、查询和状态约束正确，项目级权限决策在页面、服务和后续档案入口之间可以统一复用。
+- 访问申请批准后获得 `VIEWER` 成员关系，拒绝、撤销和到期正确生效，且不能降级已有的负责人、管理员或成员授权。
+- 系统管理员具有项目级全局访问资格。
 
-`RESTRICTED` 项目只允许项目成员、获批申请人和系统管理员访问。
+跨 Phase 2 → Phase 3 验收边界：
 
-访问申请批准后获得 `VIEWER` 成员关系，拒绝、撤销和到期正确生效。
-
-管理员可以查看全部。
+- Phase 2 可以验证用户是否具有项目档案读取资格，以及该资格是否随 `INTERNAL`、`RESTRICTED`、ProjectMembership、访问申请、撤销和到期正确变化。
+- 真正的 Document、FileAsset 和鉴权 Download 尚不存在时，不得宣称真实文件下载链路已验收。
+- Phase 3 实现 FileAsset、Document 和鉴权 Download 后，必须使用真实文件重新执行 Phase 2 → Phase 3 联合权限验收。
+- 联合验收至少覆盖 `INTERNAL`、`RESTRICTED`、`VIEWER`、`SYSTEM_ADMIN`、无权限用户以及直接 URL / IDOR 下载边界。
 
 ---
 
@@ -2591,6 +2597,8 @@ ZIP
 无权限用户无法通过真实路径或直接 URL 下载文件。
 
 被隔离、校验失败或物理缺失的文件安全失败并产生明确日志。
+
+在上述真实文件能力存在后，必须重新执行 Phase 2 → Phase 3 联合权限验收：使用真实 Document、FileAsset 和鉴权 Download，验证 `INTERNAL` 内部只读、`RESTRICTED` 项目成员、获批 `VIEWER`、`SYSTEM_ADMIN`、无权限用户以及直接 URL / IDOR 的下载边界。该联合验收不得削弱本 Phase 的真实文件下载、安全失败、下载审计和 SHA256 要求。
 
 ---
 

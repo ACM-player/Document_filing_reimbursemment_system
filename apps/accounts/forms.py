@@ -4,6 +4,7 @@ from django.contrib.auth.models import Group
 
 from .constants import SYSTEM_GROUP_NAMES
 from .models import AccountStatus, User, UserProfile
+from .services import PERMANENT_ACCOUNT_STATUSES, validate_user_status_transition
 
 GENERIC_LOGIN_ERROR = "用户名或密码错误，或登录暂时受到限制。"
 
@@ -54,4 +55,25 @@ class LabArchiveUserChangeForm(UserChangeForm):
         status = self.cleaned_data["account_status"]
         if self.instance.is_superuser and status != AccountStatus.ACTIVE:
             raise forms.ValidationError("不能通过管理后台禁用应急超级管理员。")
+        if self.instance.pk:
+            old_status = User.objects.only("account_status").get(pk=self.instance.pk).account_status
+            try:
+                validate_user_status_transition(old_status=old_status, new_status=status)
+            except forms.ValidationError as error:
+                raise forms.ValidationError(error.messages) from error
+            if status in PERMANENT_ACCOUNT_STATUSES and old_status != status:
+                from apps.projects.models import Project
+
+                blocking_codes = list(
+                    Project.all_objects.filter(
+                        principal_investigator=self.instance,
+                        deleted_at__isnull=True,
+                    )
+                    .order_by("project_code")
+                    .values_list("project_code", flat=True)[:5]
+                )
+                if blocking_codes:
+                    raise forms.ValidationError(
+                        f"请先转移未软删除项目负责人：{'、'.join(blocking_codes)}。"
+                    )
         return status

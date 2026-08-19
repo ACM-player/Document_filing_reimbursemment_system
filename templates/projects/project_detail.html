@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.project_code }} · LabArchive{% endblock %}
+
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">{{ project.project_code }}</p>
+      <h1>{{ project.name }}</h1>
+      {% if project.short_name and full_access %}<p>{{ project.short_name }}</p>{% endif %}
+    </div>
+    <div class="action-row">
+      {% if can_edit %}<a class="button-link" href="{% url 'projects:update' project.pk %}">编辑项目</a>{% endif %}
+      {% if can_manage_members %}<a class="button-link secondary" href="{% url 'projects:members' project.pk %}">管理成员</a>{% endif %}
+    </div>
+  </div>
+
+  <section class="card">
+    <dl class="summary-list">
+      <div><dt>项目编号</dt><dd>{{ project.project_code }}</dd></div>
+      <div><dt>负责人</dt><dd>{{ project.principal_investigator }}</dd></div>
+      <div><dt>状态</dt><dd>{{ project.get_status_display }}</dd></div>
+      <div><dt>可见性</dt><dd>{{ project.get_visibility_display }}</dd></div>
+      {% if full_access %}
+        <div><dt>项目类型</dt><dd>{{ project.project_type }}</dd></div>
+        <div><dt>开始日期</dt><dd>{{ project.start_date|default:"未设置" }}</dd></div>
+        <div><dt>结束日期</dt><dd>{{ project.end_date|default:"未设置" }}</dd></div>
+        <div><dt>我的项目角色</dt><dd>{% if membership %}{{ membership.get_role_display }}{% elif is_system_admin %}系统管理员{% else %}内部只读{% endif %}</dd></div>
+      {% endif %}
+    </dl>
+    {% if full_access %}
+      <h2>项目说明</h2>
+      <p class="pre-wrap">{{ project.description|default:"暂无说明" }}</p>
+    {% else %}
+      <p class="notice">这是受限项目。当前仅显示名称、编号、负责人和状态；获批前不能查看说明、成员、档案或关联报销。</p>
+    {% endif %}
+  </section>
+
+  {% if not full_access %}
+    <section class="card section-gap">
+      <h2>申请访问</h2>
+      {% if pending_request %}
+        <p>你的申请正在审核中：{{ pending_request.reason }}</p>
+        <form method="post" action="{% url 'projects:access_cancel' project.pk pending_request.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="secondary-button">取消申请</button>
+        </form>
+      {% else %}
+        <form method="post" action="{% url 'projects:access_submit' project.pk %}">
+          {% csrf_token %}
+          {{ access_form.as_p }}
+          <button type="submit">提交访问申请</button>
+        </form>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  {% if can_manage_members and memberships %}
+    <section class="card section-gap">
+      <h2>当前项目成员</h2>
+      <ul class="clean-list">
+        {% for item in memberships %}
+          <li>{{ item.user }} — {{ item.get_role_display }}{% if item.expires_at %}（至 {{ item.expires_at }}）{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if can_manage_members and managed_requests %}
+    <section class="card section-gap">
+      <h2>访问申请与授权</h2>
+      {% for item, review_form in managed_requests %}
+        <article class="request-card">
+          <h3>{{ item.requester }} · {{ item.get_status_display }}</h3>
+          <p class="pre-wrap">{{ item.reason }}</p>
+          {% if item.status == "PENDING" %}
+            <form method="post" action="{% url 'projects:access_review' project.pk item.pk %}">
+              {% csrf_token %}
+              {{ review_form.as_p }}
+              <button type="submit">提交处理结果</button>
+            </form>
+          {% elif item.status == "APPROVED" %}
+            <p>到期时间：{{ item.expires_at|default:"长期有效" }}</p>
+            <form method="post" action="{% url 'projects:access_cancel' project.pk item.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="danger-button">撤销访问</button>
+            </form>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if is_system_admin %}
+    <section class="card danger-zone section-gap">
+      <h2>系统管理员操作</h2>
+      <p>软删除后项目不会出现在正常目录中，历史成员和审计记录保留。</p>
+      <form method="post" action="{% url 'projects:delete' project.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="danger-button">软删除项目</button>
+      </form>
+    </section>
+  {% endif %}
+{% endblock %}

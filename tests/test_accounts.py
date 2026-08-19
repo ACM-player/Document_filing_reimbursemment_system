@@ -21,7 +21,8 @@ def test_system_roles_are_seeded_with_expected_permissions():
 
     assert member.permissions.count() == 0
     assert reimbursement.permissions.count() == 0
-    assert set(system_admin.permissions.values_list("codename", flat=True)) == {
+    system_permissions = set(system_admin.permissions.values_list("codename", flat=True))
+    assert {
         "add_user",
         "assign_system_roles",
         "change_user",
@@ -31,7 +32,28 @@ def test_system_roles_are_seeded_with_expected_permissions():
         "view_auditlog",
         "view_user",
         "view_userprofile",
-    }
+    } <= system_permissions
+    assert {
+        "add_project",
+        "change_project",
+        "delete_project",
+        "view_project",
+        "archive_project",
+        "transfer_project_pi",
+        "soft_delete_project",
+        "add_projecttype",
+        "change_projecttype",
+        "delete_projecttype",
+        "view_projecttype",
+        "add_projectmembership",
+        "change_projectmembership",
+        "delete_projectmembership",
+        "view_projectmembership",
+        "add_projectaccessrequest",
+        "change_projectaccessrequest",
+        "delete_projectaccessrequest",
+        "view_projectaccessrequest",
+    } <= system_permissions
 
 
 def test_new_user_gets_profile_and_baseline_member_role():

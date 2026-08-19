@@ -6,7 +6,8 @@
   <section class="card">
     <p class="eyebrow">Phase 1</p>
     <h1>欢迎，{{ request.user.display_name|default:request.user.username }}</h1>
-    <p>账号与认证基础已经启用。项目、档案和报销页面将在后续阶段接入。</p>
+    <p>账号与认证基础已经启用，项目系统已完成 Phase 2 本地验收。</p>
+    <p><a class="button-link" href="{% url 'projects:list' %}">进入项目目录</a></p>
     <dl class="summary-list">
       <div><dt>账号状态</dt><dd>{{ request.user.get_account_status_display }}</dd></div>
       <div><dt>用户名</dt><dd>{{ request.user.username }}</dd></div>

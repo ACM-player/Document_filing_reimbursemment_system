@@ -13,6 +13,7 @@
       <a class="brand" href="{% url 'home' %}">LabArchive</a>
       {% if request.user.is_authenticated %}
         <nav aria-label="用户导航">
+          <a href="{% url 'projects:list' %}">项目</a>
           <a href="{% url 'accounts:profile' %}">个人资料</a>
           <a href="{% url 'accounts:password_change' %}">修改密码</a>
           {% if request.user.is_staff %}<a href="{% url 'admin:index' %}">系统管理</a>{% endif %}

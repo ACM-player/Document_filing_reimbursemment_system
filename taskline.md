@@ -1,73 +1,629 @@
 # Taskline
 
-本文件用于记录 LabArchive 的实际开发进度。它记录“已经完成并验证的事实”，不代替 `Line.md` 的总体需求和阶段计划。
+本文件记录项目的实际开发进度、已验证事实、遗留问题和线程交接信息。
+`Line.md` 是需求、架构、Phase 规划和验收基线。
+实际代码、Git 状态和实际测试结果是判断实现状态的最终事实来源。
 
-## 更新规则
+## 1. 当前状态快照
 
-每个可交付任务或阶段完成后、提交或交付前，必须在本文件追加一条记录，至少包含：
+### 1.1 当前开发阶段
 
-- 日期、Phase 或任务名称、当前状态；
-- 本次实际完成的内容；
-- 执行过的测试、检查和结果；
-- 相关分支、提交、PR 或主要文件；
-- 尚未完成、依赖后续阶段或未验证的事项；
-- 建议的下一步。
+- 当前 Phase：Phase 2 — 项目系统；
+- 当前状态：**Phase 2 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR #2 待评审；真实文件下载联合权限验收待 Phase 3；Phase 3 尚未开始。**
+- 当前 Git 分支：`agent/phase-2-projects`；
+- Phase 2 实现 commit：`5c68b403 feat(projects): complete phase two project system`，父提交为 Phase 1 的 `119e209`；
+- 工作树：Phase 2 业务实现、测试、migration 与交付文档均已提交；本次远端事实同步使用单独的 `taskline.md` 文档 commit，最终状态以 `git status` 为准；
+- 远端状态：已推送并跟踪 `origin/agent/phase-2-projects`，实现 commit 与远端一致；
+- PR：[Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2)，base=`agent/phase-1-auth`，head=`agent/phase-2-projects`，当前 Open Draft、待评审；
+- GitHub Actions：实现 commit `5c68b403` 对应 [CI run 32255773119](https://github.com/ACM-player/Document_filing_reimbursemment_system/actions/runs/32255773119) 已通过；
+- Phase 1 的 Draft PR #1 仍为 Open Draft，尚未合并；远端 `main` 仍位于 `ed1443d`。
 
-不得把“代码已实现”“本地已验证”“远端 CI 已通过”“跨模块验收完成”混写为同一种完成状态。历史记录原则上只追加；如结论发生变化，应新增更正记录并说明原因。
+### 1.2 各阶段状态
 
-## 当前进度总览
-
-| 阶段 | 状态 | 说明 |
+| Phase | 状态 | 说明 |
 | --- | --- | --- |
-| Phase 0 | 工程基础完成，保留验证项 | 本机 Conda + PostgreSQL 路径通过；Docker 路径尚未验证 |
-| Phase 1 | 核心范围完成，跨阶段验收待办 | 账号、认证、系统角色和审计已完成；依赖项目/报销模型的联合权限验收保留到 Phase 2/4 |
-| Phase 2 | 未开始 | 下一步先商议项目模型、成员角色、可见性和访问申请 |
+| Phase 0 | 本地验证完成；跨环境验收待办 | 本机 Conda + PostgreSQL 工程路径已验证；Docker 和第二套完整环境仍未闭环，不能标记为全部完成。 |
+| Phase 1 | 本地验证完成、CI 验证完成；跨阶段验收部分完成 | 账号、认证、系统角色和审计核心范围已实现；Phase 2 项目级权限联动已本地验收，真实项目文件下载待 Phase 3，报销附件联动待 Phase 4；Draft PR #1 未合并。 |
+| Phase 2 | 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR 待评审；真实文件下载联合权限验收待 Phase 3 | 项目元数据、可见性、成员、访问申请及项目级权限决策已通过 132 项 PostgreSQL 综合测试、五条真实事务并发链、migration、多角色浏览器流程和实现 commit 远端 CI；Draft PR #2 尚未评审。真实 Document / FileAsset 下载链路不属于本阶段已有证据。 |
+| Phase 3–10 | 未开始 | Phase 2 Draft PR 等待评审；Phase 1 / Phase 2 PR 拓扑调整或合并必须另行决定，当前不提前进入 Phase 3。 |
 
-## 进展记录
+### 1.3 当前正在处理
+
+1. 已完成项目模型、权限、服务、页面、Admin、授权血缘、账号授权生命周期、锁序与幂等实现。
+2. 已完成页面角色/资源权限矩阵、跨项目 IDOR、软删除对象、POST-only / CSRF、审批失败回显和成员信息边界回归。
+3. 已创建并校验迁移前 PostgreSQL 快照，应用 `audit.0002` 与 `projects.0001`，迁移后综合门禁通过。
+4. 已完成多角色真实浏览器与桌面/移动视口验收，临时数据已精确清理。
+5. 已完成 Phase 2 范围复核、最终本地门禁、主提交、push、stacked Draft PR 与实现 commit 远端 CI；本次只同步远端交付事实，不修改业务实现，也不提前开展 Phase 3。
+
+### 1.4 高优先级问题闭环状态
+
+当前没有阻止 Phase 2 本地验收的已知 P0/P1 功能缺陷。下表保留接管时的高风险问题及最终闭环证据；外部调度和未来业务并发的边界不能被误写为已完成。
+
+| 问题 | 风险 | 当前处理状态 |
+| --- | --- | --- |
+| 账号离组未持久终止授权 | 用户变为 `DEPARTED` / `ARCHIVED` 后，活动 Membership 和 PENDING/APPROVED 申请没有关闭；账号重新激活时旧受限项目权限可能复活。 | **已本地解决并验证**；统一账号服务区分 DISABLED 暂停与不可逆离组，事务性关闭项目关系并阻断未转移 PI；真实 Admin POST、服务和离组/授权并发用例通过。 |
+| Membership 未绑定具体访问申请 | 多轮申请后，撤销旧 APPROVED 申请可能误删后来申请产生的当前 VIEWER 授权。 | **已本地解决**；新增 `source_access_request` 一对一 `PROTECT` 血缘，撤销和到期只操作精确授权，多轮撤销/到期回归通过。 |
+| 普通成员移除与访问撤销分叉 | 从成员页移除申请获批的 VIEWER 时，只结束 Membership，不同步申请状态，也不产生正确的撤销审计。 | **已本地解决并通过顺序与并发 PG 回归**；申请型 VIEWER 的成员移除复用精确撤销路径，DIRECT 才走普通成员结束；并发移除/撤销只产生一次终态审计。 |
+| 到期状态和审计不能保证落库 | 到期只在显式调用清理函数时写入；无人访问时记录可能长期保持 APPROVED，管理页还可能把已到期授权误记为主动撤销。 | **Phase 2 边界已解决并验证**；权限查询即时失效、项目管理页面执行项目级归一化，并新增幂等 `expire_project_access` 命令；移除/到期竞态只落一个终态。生产无人访问时持续归一化依赖部署阶段的外部调度器，不作为本地 Phase 2 完成声明。 |
+| 审批未复核最新申请人和项目状态 | 离组用户仍可能获批；项目已归档、删除或不再是 RESTRICTED 时可能批准过时申请。 | **已本地解决并通过顺序与并发 PG 回归**；审批锁后复核申请人、项目和关联关系；离组先持有 User 锁时审批不会创建授权，申请被安全取消。 |
+| 缺少统一并发锁顺序 | 成员管理、审批、归档和软删除存在 TOCTOU、陈旧对象授权和唯一约束异常转为 500 的风险。 | **首批高风险路径已实现并通过真实 PG 并发回归**；主要授权入口采用 User → Project → Request → Membership，插入唯一约束冲突转换为业务错误。5 个确定性线程事务用例覆盖离组/直接授权、离组/审批、PI 转移/旧 PI 离组、移除/撤销、移除/到期，连续三轮无死锁且终态正确。更广页面提交与未来业务并发仍需对应阶段持续验证。 |
+| PI 存在双事实源且组合约束不足 | `Project.principal_investigator` 与 PI Membership 可能不一致；数据库未保证 PI 为 DIRECT 且永不过期，也未保证 APPROVED_REQUEST 只能产生 VIEWER。 | **已本地解决并验证**；Project FK 为规范事实，权限不一致时安全失败，数据库约束授权形状；未转移的正常或 ARCHIVED 项目 PI 不能永久离组，DISABLED 保留 PI；PI 转移与旧 PI 离组的真实并发回归通过。 |
+| 服务层依赖 HTML 表单过滤 | 直接调用服务可能创建 ARCHIVED 项目，或把项目切换到已停用类型。 | **已本地解决并通过当前树 PG 回归**；创建禁止 ARCHIVED 和停用类型，更新禁止切换到停用类型但允许保留当前已停用类型，审批也独立复核项目与申请人状态。 |
+
+### 1.5 当前验证状态
+
+以下为当前工作树的最新实际结果。历史阶段结果保留在第 4 节，不能替代本表的当前证据。
+
+| 验证项 | 最近结果 | 当前结论 |
+| --- | --- | --- |
+| `scripts/check.zsh` | 通过 | 项目专属 `labarchive` Conda 环境、PostgreSQL 测试数据库；Ruff、格式、Django check、migration drift、pytest 和 coverage 全部通过。 |
+| 完整 pytest | 132 项通过，4.01s | Phase 2 主提交前最终工作树复跑结果，包含 Phase 1 回归与当前全部 Phase 2 模型、权限、服务、页面、Admin、命令和并发测试。 |
+| 覆盖率 | 88% | 1715 statements、398 branches；作为当前整合树综合门禁结果。 |
+| Ruff format / check | `ruff check .` 通过；75 个 Python 文件 format check 通过 | 当前整合树完整结果。 |
+| Django system check | 0 issues | 当前整合树通过。 |
+| migration drift | `No changes detected` | 当前模型与 migration 一致。 |
+| 本机 migration | `audit.0002 [X]`、`projects.0001 [X]` | 迁移前 custom-format 快照已创建并由 `pg_restore -l` 校验；迁移后状态复核通过。 |
+| 真实事务并发 | 5 项连续三轮通过（0.87s / 0.79s / 0.78s） | 覆盖离组/直接授权、离组/审批、PI 转移/旧 PI 离组、移除/撤销、移除/到期；没有死锁或授权复活。 |
+| 页面安全定向 pytest | 34 项通过，0.96s | 覆盖 SYSTEM_ADMIN 非 LAB_MEMBER、普通非门户 403、IDOR、软删除、CSRF、失败回显、INTERNAL 成员信息边界和只读 Admin。 |
+| UI / 浏览器流程 | 通过 | 实际登录并覆盖申请、失败回显、批准、撤销、INTERNAL 信息边界、SYSTEM_ADMIN 全局 CRUD/软删除、非门户 403；桌面与 390px 移动视口正常，控制台 0 warning/error；临时数据已清理。 |
+| `git diff --check` | 通过 | 最终文档更新后复核通过。 |
+| GitHub Actions | 实现 commit `5c68b403` 的 CI run `32255773119` 通过 | `test` job 完成；远端执行 Ruff、format、migration drift、migration 应用和 pytest/coverage，结论为 success。`taskline.md` 文档 commit 推送后仍需核验 PR 最新 head 的 CI。 |
+
+### 1.6 下一步执行顺序
+
+1. 提交并推送本次 `taskline.md` 远端事实同步，确认 Draft PR #2 最新 head 的 CI 仍通过。
+2. 等待 Phase 2 Draft PR #2 评审；不要在本任务中合并 Phase 1 或 Phase 2，也不要 rebase、squash 或改变 PR 拓扑。
+3. Phase 1 合并后的 Phase 2 base 调整留给下一任务明确决定，不在当前远端交付收尾中处理。
+4. 只有 Phase 2 变更范围被评审接受且另行确认后，才开始 Phase 3 文件档案系统；不得把项目元数据权限验收写成文件下载链路已完成。
+5. 部署阶段配置外部 `expire_project_access` 调度并验证无人访问时的持续归一化；本地即时失效与人工命令不替代生产调度。
+
+## 2. 当前 Phase 工作区详情
+
+### 2.1 已完成并验证
+
+这里的“完成并验证”表示 Phase 2 可独立实现范围已有本地实现、验收及实现 commit 远端 CI 证据；不表示真实文件下载联合权限验收、PR 评审或后续 Phase 已完成。
+
+- 已建立 Phase 2 的 PostgreSQL 自动化测试基础；当前工作树综合门禁 132 项通过、覆盖率 88%，包含 Phase 1 回归及现有全部 Phase 2 自动化用例。
+- 已验证现有权限函数不会因为 `REIMBURSEMENT_ADMIN` 系统角色而自动授予 RESTRICTED 项目访问权。
+- 已验证申请授权与具体申请一对一绑定；旧申请撤销或到期不会关闭后来申请产生的授权。
+- 已验证申请授权直接晋升和 PI 转移会结束旧授权行并新建 DIRECT 行，不改写来源历史。
+- 已验证 Project PI 为规范事实，活动 PI Membership 不匹配时 PI 权限安全失败；授权来源、角色和到期组合受数据库约束。
+- 已验证统一账号状态服务区分 DISABLED 暂停与不可逆离组：恢复只保留仍有效授权，DEPARTED / ARCHIVED 关闭活动项目关系且旧 RESTRICTED 权限不复活。
+- 已验证未转移的正常或 ARCHIVED 项目 PI 不能永久离组，DISABLED PI 的规范关系保留，项目审计失败会回滚整笔账号离组。
+- 已验证当前模型定义与首版 migration 文件之间没有检测到漂移。
+- 已验证服务边界禁止创建 ARCHIVED 项目、使用停用项目类型及审批陈旧申请；重复成员设置、移除、取消和撤销按授权边界幂等。
+- 已验证真实 Admin POST、普通移除、页面到期归一化和管理命令写库/幂等用例；页面测试曾因全局时间 mock 误使 Session 到期，收窄 mock 后定向与全量回归均通过。
+- 已验证所有项目页面和 POST 端点在对象解析前执行门户资格判断；SYSTEM_ADMIN 非 LAB_MEMBER、普通非门户 403、跨项目 IDOR、软删除对象、CSRF、审批失败回显和 INTERNAL 成员信息边界均有回归。
+- 已验证五条真实 PostgreSQL 线程事务竞态，连续三轮通过；锁序、终态、审计单次性和无死锁均得到证据。
+- 已应用本机 `audit.0002` 与 `projects.0001`；迁移前快照已校验，模型 drift 为 `No changes detected`。
+- 已完成多角色真实浏览器流程、桌面/移动视口和控制台验收；所有固定前缀的临时数据与测试审计已精确清理。
+- Phase 1 回归已包含在 132 项完整 PostgreSQL pytest 中并重新通过。
+- 最终文档与页面展示修改后，完整 Ruff、格式、Django check、migration drift、132 项 pytest、coverage 和 `git diff --check` 均已再次通过。
+
+### 2.2 已提交并通过实现 commit 远端 CI
+
+- `ProjectType`、`Project`、`ProjectMembership`、`ProjectAccessRequest` 模型、精确授权血缘和首版约束；
+- INTERNAL / RESTRICTED 可见性和 PLANNING / ACTIVE / PAUSED / COMPLETED / ARCHIVED 状态；
+- PI / MANAGER / MEMBER / VIEWER 项目角色；
+- 项目创建、编辑、软删除、负责人转移、成员管理、访问申请、审批、撤销和到期服务；
+- 统一账号状态服务及 Django Admin 接入、账号永久离组的项目授权清理；
+- 项目级到期页面归一化和幂等 `expire_project_access` 管理命令；
+- 项目权限查询函数、表单、URL、视图、模板和导航；
+- 项目管理后台只读入口、项目类型配置入口及样式；
+- 项目相关审计动作以及已在本机应用的 `audit.0002`、`projects.0001` migration；
+- 模型、权限、服务、页面、Admin、命令、生命周期和并发自动化测试。
+
+### 2.3 保留边界与非阻塞增强
+
+- 到期权限即时失效、管理页归一化和人工命令已实现并通过顺序/并发回归；无人访问时持续自动落库仍需部署外部调度器。
+- 当前详情页只展示活动或已批准的申请，不提供完整拒绝/撤销/到期历史时间线；历史保留在数据库和审计中，完整业务历史 UI 可作为后续增强。
+- 移除、撤销和软删除均为 CSRF 保护的 POST 操作，但当前没有额外确认页；`Line.md` 只强制永久删除二次确认，Phase 2 不提供永久删除，因此该项不是本地验收阻塞。
+- 账号永久终止保留其系统 Group；受支持状态机禁止终态恢复。任何未来的恢复或角色清理政策必须另行设计和审计。
+- 项目文件与报销附件模型尚不存在；Phase 2 可以验证用户是否具有项目档案读取资格及统一的项目级权限决策，不能宣称真实文件或附件下载链路已验收。
+
+### 2.4 尚未执行
+
+- Phase 2 Draft PR #2 的人工评审与合并决定；
+- Phase 3 文件档案系统及真实下载鉴权；
+- Phase 4 报销业务和附件联合权限；
+- 生产环境外部到期调度器配置与执行验证；
+- Docker、第二套全新环境和服务器恢复演练。
+
+### 2.5 已知缺陷
+
+- 当前没有经自动化、浏览器和最终差距复核确认的 Phase 2 可独立实现范围内 P0/P1 功能缺陷。
+- 申请人页面没有完整展示最近一次拒绝、撤销或到期历史；数据与审计均保留，属于后续可用性增强。
+- 移除、撤销和软删除没有额外确认页；均为 CSRF 保护的 POST，且当前不提供永久删除。若未来增加永久删除，必须按 `Line.md` 二次确认。
+- 账号永久终止不会移除 `SYSTEM_ADMIN` / `REIMBURSEMENT_ADMIN` Group；受支持状态机禁止终态重新激活，未来若改变恢复政策必须单独设计和审计。
+
+### 2.6 验证边界
+
+- 当前页面角色/资源矩阵、写端点越权、跨项目 UUID / IDOR、软删除、CSRF 和审批失败回显已有自动化回归。
+- 同一用户多轮申请、撤销旧申请、旧申请到期、直接晋升、普通移除、账号离组、Admin POST、到期命令和五条并发链均有 PostgreSQL 证据。
+- 浏览器已覆盖 Phase 2 核心多角色流程，但不是穷举所有表单字段组合；自动化测试承担完整边界回归。
+- Phase 2 实现 commit 已通过远端 CI，但仍未验证 Docker 或第二套全新环境。
+- Phase 3 文件下载 URL、旧 Session 下载、文件类型与物理文件异常测试尚未开始，不能计入本阶段覆盖。
+
+### 2.7 当前新增 / 修改的重要文件
+
+Phase 2 实现 commit `5c68b403` 中修改：
+
+- `Line.md`
+- `README.md`
+- `apps/accounts/admin.py`
+- `apps/accounts/forms.py`
+- `apps/accounts/services.py`
+- `apps/accounts/signals.py`
+- `apps/audit/models.py`
+- `apps/projects/admin.py`
+- `apps/projects/models.py`
+- `config/urls.py`
+- `docs/ARCHITECTURE.md`
+- `docs/DATABASE.md`
+- `static/styles.css`
+- `templates/base.html`
+- `templates/core/home.html`
+- `tests/test_accounts.py`
+- `tests/test_accounts_admin.py`
+- `taskline.md`
+
+Phase 2 实现 commit `5c68b403` 中新增：
+
+- `apps/audit/migrations/0002_alter_auditlog_action.py`
+- `apps/projects/forms.py`
+- `apps/projects/management/__init__.py`
+- `apps/projects/management/commands/__init__.py`
+- `apps/projects/management/commands/expire_project_access.py`
+- `apps/projects/migrations/0001_initial.py`
+- `apps/projects/permissions.py`
+- `apps/projects/services.py`
+- `apps/projects/urls.py`
+- `apps/projects/views.py`
+- `docs/adr/0004-project-authorization-lineage.md`
+- `docs/adr/0005-account-project-access-lifecycle.md`
+- `docs/PHASE2_REPORT.md`
+- `templates/projects/project_detail.html`
+- `templates/projects/project_form.html`
+- `templates/projects/project_list.html`
+- `templates/projects/project_members.html`
+- `tests/project_factories.py`
+- `tests/test_account_project_lifecycle.py`
+- `tests/test_expire_project_access_command.py`
+- `tests/test_project_permissions.py`
+- `tests/test_project_service_boundaries.py`
+- `tests/test_project_service_concurrency.py`
+- `tests/test_project_service_idempotency.py`
+- `tests/test_project_services.py`
+- `tests/test_project_views.py`
+- `tests/test_projects_admin.py`
+- `tests/test_projects_models.py`
+
+### 2.8 Migration、分支、远端和 PR 状态
+
+- `projects.0001` 包含授权血缘与组合约束，`audit.0002` 扩展项目审计动作；migration drift 检查未发现差异；
+- 本机开发库已应用 `audit.0002` 与 `projects.0001`。迁移前快照为 `.local/backups/pre-phase2-20260812-migration.dump`，SHA-256 为 `30d9469b5183cbbc7ad92c4e389f704b3a8237fe4155ba9afe9fbcdf3f9f8b8e`，已由 `pg_restore -l` 校验；
+- 当前分支 `agent/phase-2-projects` 基于 `119e209`；Phase 2 实现 commit 为 `5c68b403`，已推送并跟踪 `origin/agent/phase-2-projects`；
+- [Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 为 Open Draft，base=`agent/phase-1-auth`、head=`agent/phase-2-projects`，实现 commit 远端 CI 已通过但 PR 尚未评审；
+- Phase 1 位于 `agent/phase-1-auth@119e209`，[Draft PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 仍为 Open Draft，尚未合并到 `main@ed1443d`；
+- Phase 3 尚未开始；真实 FileAsset / Document / 鉴权 Download 联合权限验收仍待 Phase 3。
+
+## 3. 未闭环的跨 Phase 事项
+
+- Phase 1 → Phase 2：**项目级联动已本地完成**。真实 Project、Membership 和访问申请上的 INTERNAL / RESTRICTED 项目元数据与授权决策已进入 132 项综合回归和浏览器流程；该结论不包含真实文件下载。
+- Phase 1 / Phase 3 / Phase 4：**Phase 2 项目级权限部分已完成**，报销管理员不会因为系统角色获得 RESTRICTED 项目档案读取资格；真实受限项目文件下载待 Phase 3，报销附件模型与联合权限待 Phase 4。
+- Phase 0 / 后续交付：Docker 路径和第二套完整环境仍未验证，不能用本机 Conda 路径代替该验收。
+- Phase 2 → Phase 3：真实文件上传、下载、版本、配额和档案级联合权限验收尚未开始；当前已验证项目元数据权限和项目档案读取资格，不能声明真实档案访问全链路完成。Phase 3 实现 Document、FileAsset 和鉴权 Download 后，必须用真实文件复核 INTERNAL、RESTRICTED、VIEWER、SYSTEM_ADMIN、无权限用户及直接 URL / IDOR 边界。
+- Phase 4：报销业务和附件联合权限尚未开始。
+- MFA：管理员 MFA 按 `Line.md` 计划在远程部署前闭环，本地 Phase 2 不提前实现。
+- 反向代理真实来源 IP：依赖服务器和代理拓扑，保留到部署阶段验证。
+- 服务器部署、TLS、生产配置、备份与恢复演练：当前明确延后，不属于本地 Phase 2 完成条件。
+
+## 4. 工作历史
+
+### 2026-08-19 — Phase 2：远端交付
+
+- 状态：**Phase 2 可独立实现范围本地验收及实现 commit 远端 CI 完成；Draft PR #2 待评审；真实文件下载联合权限验收待 Phase 3；Phase 3 尚未开始。**
+- 分支：`agent/phase-2-projects`，upstream=`origin/agent/phase-2-projects`；
+- 提交 / PR：`5c68b403 feat(projects): complete phase two project system`；[Draft PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2)，base=`agent/phase-1-auth`、head=`agent/phase-2-projects`。
+
+#### 完成内容
+
+- 复核 46 个 Phase 2 提交文件（28 个新增、18 个修改，6807 行新增、86 行删除），未发现 Secret、备份、截图、数据库 dump、缓存、Phase 3 实现或无关文件；
+- 使用显式路径暂存并形成 Phase 2 主提交，不重写 Phase 1 历史；分支已推送并设置 upstream；
+- GitHub CLI 2.97.0 通过 `dev_app` 环境调用，`ACM-player` 认证有效且具有 `repo` / `workflow` scopes，仓库权限为 ADMIN；
+- GitHub App 创建 PR 因 installation 权限返回 `403 Resource not accessible by integration`，按发布技能回退到 `conda run -n dev_app gh pr create` 后成功创建 stacked Draft PR #2；
+- 核验 PR #2 为 Open Draft、可合并，head 为 `5c68b403`；Phase 1 Draft PR #1 仍未合并。
+
+#### 验证结果
+
+- 主提交前最终 `scripts/check.zsh`：Ruff、75 文件 format、Django check、migration drift、132 项 PostgreSQL pytest（4.01s）和 88% coverage 全部通过；`git diff --check` 通过；
+- 实现 commit `5c68b403` 对应 [GitHub Actions CI run 32255773119](https://github.com/ACM-player/Document_filing_reimbursemment_system/actions/runs/32255773119) 成功；`test` job 的 Ruff、format、migration drift、migration 应用及 pytest/coverage steps 全部通过；
+- 本条记录作为单独文档 commit 推送后，仍需确认 PR 最新 head 的 CI；最终结果以 PR checks 与交付报告为准。
+
+#### 未完成 / 遗留边界
+
+- Draft PR #2 尚未评审或合并；本任务不合并 Phase 1 / Phase 2，不 rebase、squash 或调整 PR base；
+- Phase 3 尚未开始，真实 FileAsset / Document / 鉴权 Download 的联合权限验收仍待 Phase 3；
+- 外部到期调度器、Docker、第二套环境、服务器部署和恢复演练仍属于后续阶段。
+
+#### 下一步
+
+提交并推送本次 `taskline.md` 同步，确认最新 head CI 通过后停止；后续先处理 PR 评审与 stacked 分支拓扑，再另行决定是否进入 Phase 3。
+
+### 2026-08-12 — 需求基线一致性修订
+
+- 状态：**文档边界修订完成；Phase 2 可独立实现范围本地验收完成；真实文件下载联合权限验收待 Phase 3；远端提交、CI 与评审待办。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；
+- 提交 / PR：本次未暂存、未提交、未推送，也未创建 PR；Phase 3 未开始。
+
+#### 修订内容
+
+- 将 `Line.md` 页首改为长期有效的需求、架构与 Phase 验收基线说明，实际进度统一指向本文件；
+- 将 Phase 2 验收收窄为项目元数据、可见性、成员、访问申请、VIEWER 生命周期、管理员全局访问和统一项目级权限决策；
+- 将真实 Document / FileAsset / Download 的权限、安全失败、SHA256 和直接 URL / IDOR 验收明确保留在 Phase 3，并要求执行 Phase 2 → Phase 3 真实文件联合权限验收；
+- 澄清 Phase 1 的系统角色边界、Phase 2 的项目级权限决策和 Phase 3 的真实文件下载之间的跨阶段验收关系；
+- 完整检查其余 Phase，未发现需要修改的明确同类型跨阶段验收矛盾；
+- 本次只调整 Phase 边界表述，没有改变已实现的业务需求、数据模型、权限模型、架构设计或 Phase 顺序，也没有修改业务代码、测试或 migration。
+
+#### 验证结果
+
+- `git diff --check` 通过；
+- `Line.md` 与 `taskline.md` 的 ATX 标题层级和 fenced code block 配对检查通过；
+- 人工复核 Phase 1 / Phase 2 / Phase 3 描述：项目级权限决策与真实文件下载边界一致，未发现相互矛盾；
+- 人工复核两份文档的状态表述一致，Phase 3 保持未开始；
+- 本次没有修改业务代码、测试或 migration，因此未重新运行 PostgreSQL 测试套件。
+
+#### 未完成 / 遗留边界
+
+- Phase 3 尚未开始；真实文件下载联合权限验收必须等待 Document、FileAsset 和鉴权 Download 实现后执行；
+- Phase 2 工作树仍未提交或推送，GitHub Actions 和 PR 评审仍未执行。
+
+#### 下一步
+
+保持 Phase 3 未开始状态；先按既有交付流程处理 Phase 2 的提交、远端 CI 与评审，待另行确认后再进入 Phase 3。
+
+### 2026-08-12 — Phase 2：发布前检查被 GitHub CLI 阻塞
+
+- 状态：**本地验收保持通过；远端发布未开始。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；暂存区为空；
+- 远端：`origin/agent/phase-1-auth` 位于 `119e209`，`origin/agent/phase-2-projects` 不存在。
+
+#### 实际检查与停止边界
+
+- 最终工作树 `scripts/check.zsh` 再次通过：132 项 PostgreSQL pytest（3.97s）、88% coverage、Ruff、格式、Django check 和 migration drift 全部通过；
+- Git 收尾复核：17 个 tracked 修改、28 个 untracked 文件、无 staged 内容，`git diff --check` 通过；
+- 本机迁移保持 `audit.0002 [X]`、`projects.0001 [X]`，开发库 User / Project / ProjectType / Membership / AccessRequest / AuditLog 计数均为 0；
+- 迁移前备份 SHA-256 复核一致，`pg_restore -l` 可读取 110 行目录；备份与浏览器截图均由 `.gitignore` 排除；
+- 发布前置检查发现 `gh` 未安装。按 GitHub 发布工作流要求在 `gh auth status` 前停止，未执行 staging、commit、push 或 PR 创建。
+
+#### 精确下一步
+
+安装并认证 GitHub CLI；重新执行发布前范围确认。Phase 1 未合并时，把 Phase 2 Draft PR 堆叠到 `agent/phase-1-auth`；远端 CI 与评审稳定后再进入 Phase 3。
+
+### 2026-08-12 — Phase 2：本地实现与验收完成
+
+- 状态：**Phase 2 本地实现、迁移和验收完成；远端提交、CI 与评审尚未执行。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；
+- 提交 / PR：未提交、未推送、无 upstream、无 Phase 2 PR。
+
+#### 完成内容
+
+- 完成项目门户资格与系统角色边界：活跃 LAB_MEMBER 可进入；SYSTEM_ADMIN / superuser 即使不属于 LAB_MEMBER 仍有全局项目权限；其他账号在对象解析前统一 403；
+- 收紧 INTERNAL 普通读者信息边界，成员目录只对可管理成员者查询和展示；
+- 审批表单校验或服务错误在原页保留绑定字段和决策，自移除后跳转可访问详情；删除未使用的宽泛 Admin form；
+- 补 SYSTEM_ADMIN、非门户账号、IDOR、软删除、CSRF、失败回显、只读 Admin 和成员目录回归；
+- Primary 修正系统管理员无 LAB_MEMBER 时目录/详情角色展示，并由定向测试和真实浏览器复核；
+- 创建并校验迁移前 PostgreSQL custom-format 快照，应用 `audit.0002` 与 `projects.0001`；
+- 使用固定前缀临时数据完成多角色真实浏览器流程，之后精确清理账号、项目、成员、申请、Session 和 23 条测试审计；
+- 更新 README 并新增 `docs/PHASE2_REPORT.md`，明确本地完成、远端未验证及 Phase 3/4/部署边界。
+
+#### 验证结果
+
+- 最终工作树 `scripts/check.zsh`：Ruff、75 文件格式、Django check、migration drift、132 项 PostgreSQL pytest（3.97s）和 88% coverage 全部通过；
+- 本机 migration：`audit.0002 [X]`、`projects.0001 [X]`，`No changes detected`；
+- 页面安全定向测试：34 项通过；
+- 浏览器：受限最小披露、申请、失败回显、批准、撤销即时失权、INTERNAL 信息隔离、SYSTEM_ADMIN 全局创建/管理/软删除、普通非门户 403 全部通过；1280×720 和 390×844 布局正常，控制台 0 warning/error；
+- 迁移前快照 SHA-256：`30d9469b5183cbbc7ad92c4e389f704b3a8237fe4155ba9afe9fbcdf3f9f8b8e`。
+
+#### 未完成 / 遗留边界
+
+- 工作树仍未提交或推送，Phase 2 GitHub Actions、PR 与评审没有证据；
+- 外部到期调度器、Docker、第二套环境和恢复演练属于部署后续；
+- FileAsset / Document、真实文件下载鉴权属于 Phase 3，报销附件联合权限属于 Phase 4；
+- 申请历史时间线和软删除额外确认页可作为后续 UI 增强，不是当前 `Line.md` 的 Phase 2 阻塞。
+
+#### 下一步
+
+复核 Git、迁移、开发库清洁度和备份；随后审查、提交并推送 Phase 2 工作树，等待远端 CI 和评审。远端结果稳定前不提前开始 Phase 3。
+
+### 2026-08-12 — Phase 2：授权锁序真实并发回归
+
+- 状态：**首批五条高风险事务链已通过确定性 PostgreSQL 并发验证；Phase 2 仍未完成。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；
+- 提交 / PR：未提交、未推送、无 upstream、无 Phase 2 PR。
+
+#### 完成内容
+
+- 新增真实线程事务回归，所有 worker 使用独立数据库连接、事务内 `lock_timeout` / `statement_timeout`、事件或屏障控制顺序、join 超时和完整异常回传；
+- 验证账号离组先持有目标 User 锁时，后续直接授权和访问审批均安全失败，不产生离组后活动授权；
+- 验证 PI 转移与旧 PI 离组按统一锁序串行完成，规范 PI、成员角色和旧账号终态一致；
+- 验证申请型成员移除与撤销并发只产生一次撤销审计；移除与到期并发只落一个终态，不死锁。
+
+#### 验证结果
+
+- `tests/test_project_service_concurrency.py`：连续三轮均为 5 项通过，分别用时 0.87s、0.79s、0.78s；
+- 新文件 Ruff check / format check：通过；`git diff --check`：通过；
+- Primary 已逐行审查测试：线程使用真实服务和 PostgreSQL 行锁，patch 仅用于线程限定的同步 hook，没有替换核心事务结果。
+
+#### 未完成 / 遗留问题
+
+- 当前并发集合覆盖已识别的五条最高风险链，不代表未来 Phase 或全部页面写端点自动具备并发验收；
+- 页面权限入口、IDOR、CSRF、审批失败回显和成员自移除交互仍在下一里程碑处理；
+- 最终 migrations、综合门禁、浏览器和 CI 仍未完成。
+
+#### 下一步
+
+修正项目门户角色边界并完成页面安全矩阵；随后再应用最终迁移并运行综合门禁与浏览器验收。
+
+### 2026-08-12 — Phase 2 中断接管与当前树回归复核
+
+- 状态：**只读接管完成；中断后遗留的服务边界、幂等和锁序实现已核实并通过当前树 PostgreSQL 回归，Phase 2 仍未完成。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；
+- 提交 / PR：未提交、未推送、无 upstream、无 Phase 2 PR；接管时为 16 个 tracked 修改、25 个 untracked 文件，暂存区为空。
+
+#### 完成内容
+
+- 完整读取 `Line.md` 与本文件；确认根目录无项目级 `AGENTS.md`，按全局规则接管；
+- 核对分支、Git status、tracked / untracked / staged 状态和实际代码，确认没有语法残片或空壳函数；
+- 发现中断后 `apps/projects/services.py` 已写入目标锁序辅助、审批锁后复核、服务边界和顺序幂等实现，且新增 `test_project_service_boundaries.py` 与 `test_project_service_idempotency.py`，本文件此前记录已落后于代码；
+- 修正项目页面到期测试的 mock 边界：不再替换共享 `django.utils.timezone.now`，避免测试把登录 Session 一并推进到过期；真实到期服务仍执行并精确断言落库时间。
+
+#### 验证结果
+
+- 项目专属环境门禁确认：`/opt/miniconda3/envs/labarchive/bin/python`，Python 3.13.14；
+- 接管后高风险定向 PostgreSQL pytest：首次 32 项通过、2 项失败；失败均为测试全局时间 mock 导致登录 Session 返回 302；修正后 34 项通过；
+- 当前工作树完整 PostgreSQL pytest：105 项通过；
+- 修正后的项目页面到期用例单独复跑：2 项通过；单文件 Ruff 通过；
+- `git diff --check`：通过；
+- 真实并发、完整 Ruff / Django / migration 综合门禁、本机开发库 migration、浏览器和 CI 尚未执行。
+
+#### 未完成 / 遗留问题
+
+- 现有幂等用例是顺序重复调用，不能证明并发审批、离组、PI 转移、移除、撤销和到期无死锁或无授权复活；
+- 完整页面权限/IDOR/归档与软删除写端点、CSRF、审批失败回显、危险操作确认和成员信息边界仍待验收；
+- `ProjectMembershipAdminForm(fields="__all__")` 未使用且字段范围过宽，仍需删除或收紧；
+- 最终 migrations 尚未应用到本机开发库，`scripts/check.zsh`、浏览器和 CI 未运行。
+
+#### 下一步
+
+先补确定性 PostgreSQL 事务并发回归；通过后继续页面安全矩阵和交互边界，再应用最终迁移、运行综合门禁及浏览器验收。
+
+### 2026-08-10 — Phase 2：账号与项目授权生命周期
+
+- 状态：**生命周期核心已实现并通过 PostgreSQL 定向验证；最后新增的真实后台、普通移除、页面和命令集成用例待复跑，Phase 2 仍未完成。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；
+- 提交 / PR：未提交、未推送、无 upstream、无 Phase 2 PR；当前为 16 个 tracked 修改和 23 个 untracked 文件，暂存区为空。
+- - 中断说明：本线程最终因 Codex 周使用额度耗尽被平台强制终止，未生成正常最终回复；因此最后一次 `taskline.md` 更新之后进行的锁序、幂等及相关代码调查可能存在未完成或未记录操作。下一线程必须以当前 Git 工作树、代码和实际测试重新核验，不得假定本线程自然结束或当前 Phase 已完成。
+
+#### 完成内容
+
+- 新增统一 `change_user_status` 服务和严格状态机；Django Admin 状态写入口改为调用该事务服务，不再单独重复写状态审计；
+- 冻结 DISABLED 为临时暂停：不关闭 Membership 或 PENDING / APPROVED 申请，恢复 ACTIVE 时只归一化已经自然到期的申请授权；
+- 冻结 DEPARTED / ARCHIVED 为不可逆终态：在账号状态与审计的同一事务中取消 PENDING、精确撤销 APPROVED、结束其余 DIRECT Membership；
+- 账号永久离组前阻断任何未软删除项目（含 ARCHIVED 项目）的规范 PI，要求先显式转移；DISABLED PI 保留规范字段和 PI Membership；
+- 关闭申请时保留原 `reviewed_by`、`reviewed_at` 和 `review_note`，关闭操作者与原因写入 append-only 审计；审计失败会回滚账号和项目关系；
+- 申请型 VIEWER 从成员页移除时复用来源申请撤销路径，避免 Membership 与申请状态分叉；
+- 项目详情和成员管理页改为项目级到期归一化，新增幂等 `expire_project_access` 管理命令；权限查询本身继续即时忽略过期授权；
+- 新增 ADR-0005，并补账号生命周期、真实 Admin POST、普通移除、页面到期和命令用例。
+
+#### 验证结果
+
+- 生命周期实施后的账号/项目定向 pytest：31 项通过，使用本机 PostgreSQL 测试数据库；覆盖 DISABLED 恢复、DEPARTED/ARCHIVED 清理、PI 阻断/转移、审计失败回滚及既有项目服务和 Admin 回归；
+- 到期命令无数据库 pytest：5 项通过，命令发现与 help 输出通过；1 项 PostgreSQL 行为用例主动 deselect；
+- Ruff：当前 71 个 Python 文件 format check 通过，`ruff check .` 通过；Django system check 0 issues；`git diff --check` 通过；
+- migration drift 返回 `No changes detected`，但沙箱无法连接 127.0.0.1:5432，迁移历史一致性检查有明确权限警告；
+- 当前工作树完整 pytest 未重跑：受控 PostgreSQL 执行在新增测试后因 Codex 执行额度限制被拒。最近一次完整结果仍是生命周期修改前的 66 项通过，不能替代当前树验证；
+- 新增真实 Admin POST、普通移除、项目级页面到期及命令 PG 集成测试均已写出且通过 Ruff，但本次未执行到测试体；浏览器、覆盖率、`scripts/check.zsh`、本机 migration 和 CI 未运行。
+
+#### 未完成 / 遗留问题
+
+- 授权入口仍存在 User / Project / Request / Membership 锁序互逆：离组可与审批、直接授权或 PI 转移竞态，成员移除也可与撤销/到期形成死锁路径；
+- 重复移除、重复取消/撤销以及相同 DIRECT 角色设置尚未统一为幂等结果；
+- 审批仍未在锁后复核申请人 ACTIVE + LAB_MEMBER、项目未删除/可授权及 RESTRICTED 最新状态；服务层状态和停用类型白名单仍不足；
+- 账号永久终止保留系统 Group；当前受支持状态机不能恢复终态，未来若改变角色保留或恢复政策必须单独设计并审计；
+- `expire_project_access` 可人工可靠运行，但 Phase 2 不内置调度器；部署外部调度器前不得宣称无人访问时持续自动落库。
+
+#### 下一步
+
+先统一目标 User → Project → Request → Membership 的锁顺序和锁后复核，再实现重复操作幂等及服务边界业务冲突；获得 PostgreSQL 执行权限后先运行本条新增用例，再运行当前工作树完整门禁。
+
+### 2026-08-10 — Phase 2：授权血缘与 PI 规范事实
+
+- 状态：**可交付项本地实现与 PostgreSQL 自动化验证完成；Phase 2 仍未完成。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；
+- 提交 / PR：未提交、未推送、无 upstream、无 Phase 2 PR；保留现有工作树继续处理生命周期阻塞。
+
+#### 完成内容
+
+- 为 `ProjectMembership` 增加 `source_access_request` nullable 一对一 `PROTECT` 关系，使每条申请授权精确绑定具体访问申请；
+- 增加授权形状数据库约束：DIRECT 不关联申请且永不过期，APPROVED_REQUEST 必须关联申请且只能是 VIEWER，PI 因此只能是永久 DIRECT；
+- 将 `Project.principal_investigator` 冻结为负责人规范事实，活动 PI Membership 作为必须匹配的物化授权；权限解析在两者不一致时安全失败；
+- 撤销和到期改为只操作申请精确绑定的历史 Membership，删除原 project + user 模糊匹配；
+- 申请授权被直接设为普通成员或 PI 时，结束旧授权行和来源申请，再创建不同 UUID 的 DIRECT 行，保留原角色、来源和到期历史；
+- 直接分配成员时取消同一用户的待处理申请，陈旧审批不再生成“APPROVED 但无授权”的记录；
+- 按尚未应用、尚未提交的事实重新生成 `projects.0001`，并新增 ADR-0004 及架构、数据库说明；
+- 增加授权组合、一对一保护、跨项目/用户校验、PI 安全失败、多轮撤销/到期隔离、直接晋升和 PI 转移回归测试。
+
+#### 验证结果
+
+- 项目专属环境：Python 3.13.14，解释器 `/opt/miniconda3/envs/labarchive/bin/python`；
+- 授权模型、权限和服务定向 pytest：33 项通过；服务定向复跑 13 项通过；
+- 完整 pytest：66 项通过，使用 PostgreSQL 测试数据库并包含 Phase 1 回归；
+- Ruff check / format：通过；Django system check：0 issues；migration drift：`No changes detected`；
+- 首次接管全量测试因沙箱禁止连接本机 `127.0.0.1:5432` 产生 49 个数据库 setup error；获准连接同一本机 PostgreSQL 后原草稿 53 项通过，修改后 66 项通过，确认不是代码或数据库服务失败；
+- 覆盖率、本机开发库 migration、`scripts/check.zsh`、CI 和浏览器流程本次未运行。
+
+#### 未完成 / 遗留问题
+
+- 账号 `DEPARTED` / `ARCHIVED` 尚未事务性结束活动 Membership 和 PENDING/APPROVED 申请，重新激活仍有授权复活风险；
+- 普通成员移除尚未委托统一申请撤销路径；可靠到期执行机制和全部审计语义尚未闭环；
+- 项目、申请、Membership 锁顺序及审批最新状态复核尚未统一；服务层仍信任部分表单过滤；
+- 当前迁移仅在全新 PostgreSQL 测试库执行，本机开发库仍未应用；当前工作树仍不适合提交或推送。
+
+#### 下一步
+
+实现统一授权生命周期：明确 DISABLED 暂停语义，事务性处理 DEPARTED / ARCHIVED、普通移除、撤销和到期；补离组后重新激活不恢复旧权限及普通移除一致性回归。完成后再次更新本快照并追加历史。
+
+### 2026-08-10 — Phase 2 中断交接：项目系统草稿
+
+- 状态：**部分完成；不得标记为 Phase 2 完成，不建议直接提交或推送当前业务草稿。**
+- 分支：`agent/phase-2-projects`，基线 `119e209`；
+- 提交 / PR：本次草稿无提交、未推送、无 upstream、无 PR；`main` 当时为 `ed1443d`，Phase 1 Draft PR #1 尚未合并。
+
+#### 完成内容
+
+- 建立项目类型、项目、项目成员和访问申请的首版模型与约束；
+- 建立项目 CRUD、软删除、PI 转移、成员管理、访问申请、审批、撤销和到期服务草稿；
+- 建立权限查询、表单、视图、URL、页面、后台入口、审计动作和首版 migrations；
+- 建立模型、权限、服务、页面测试草稿；
+- 工作树记录为 10 个已跟踪文件修改（含当时更新的 `taskline.md`）和 16 个未跟踪文件，暂存区为空；未执行 reset、revert 或删除。
+
+#### 验证结果
+
+- Ruff format / check：通过；
+- Django system check：0 issues；
+- migration drift：No changes detected；
+- Phase 2 定向测试：24 项通过；
+- 完整 pytest：53 项通过，覆盖率 83%，使用 PostgreSQL 测试数据库，Phase 1 回归同时通过；
+- `git diff --check`：通过；当时更新交接记录前，已跟踪业务文件差异为 463 行新增、20 行删除，未跟踪文件未计入。
+
+#### 未完成 / 遗留问题
+
+- `projects.0001` 和 `audit.0002` 未应用到本机开发库；
+- 未运行 Phase 2 最终 `scripts/check.zsh`、GitHub Actions、浏览器流程、并发/重复提交/CSRF 专项验证；
+- 已识别账号离组授权复活、申请与授权无精确关联、普通移除与撤销不一致、到期不能保证落库、审批不复核最新状态、锁序缺失、PI 双事实源及服务层校验不足等高优先级问题；
+- 另有 LAB_MEMBER 移除边界、INTERNAL 成员信息暴露、审批失败回显、申请历史展示、重复移除、自移除重定向、危险操作确认和后台表单字段等问题。
+
+#### 下一步
+
+先修数据模型和授权生命周期，再统一锁序与服务校验并补回归测试；完成后才应用迁移、运行综合门禁和 UI 验证，并考虑提交推送。
+
+### 2026-08-10 — 更正：进度追踪机制已提交并推送
+
+- 状态：完成；
+- 提交 / PR：`119e209 docs: add task progress log`，已推送至 `origin/agent/phase-1-auth`，Draft PR #1；
+- 更正原因：上一条记录生成时文档确实尚未提交，随后已完成发布；保留原记录并追加更正，不覆盖历史状态；
+- 验证结果：Draft PR #1 的 GitHub Actions 再次通过，耗时 34 秒；
+- 未完成：Phase 1 分支仍是 Draft PR，尚未合并到 `main`。
+
+### 2026-08-10 — 建立本地进度追踪机制
+
+- 状态：记录生成时已完成文件建立，但尚未提交或推送；
+- 分支：`agent/phase-1-auth`；
+- 提交 / PR：记录生成时无对应提交；后续状态见上一条更正记录。
+
+#### 完成内容
+
+- 建立根目录 `taskline.md`；
+- 定义每个任务完成后的记录字段；
+- 将进度记录步骤写入总体开发流程和 README 目录说明；
+- 根据 Phase 1 本地测试、远端 CI、提交和 PR 证据写入首条完整记录。
+
+#### 验证结果
+
+- 已核对 Phase 1 本地测试、远端 CI、提交和 PR 证据。
+
+#### 未完成 / 遗留问题
+
+- 该记录生成时，进度文档修改尚未提交或推送。
+
+#### 下一步
+
+后续每个可交付任务在交付前更新本文件，并在状态发生变化时追加更正记录。
 
 ### 2026-08-10 — Phase 1：账号、认证与审计基础
 
-- 状态：**Phase 1 可独立实现的功能与本地/远端验证已完成；严格按全部验收条目计算，仍有跨阶段联合权限验收未闭环。**
-- 分支：`agent/phase-1-auth`
-- 提交：
-  - `3cbdeee feat(auth): complete phase one authentication`
-  - `6f5d609 ci: enable PostgreSQL data checksums`
-- 草稿 PR：[GitHub PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1)
+- 状态：**可独立实现的功能与本地/远端验证完成；严格按全部验收条目计算，跨阶段联合权限验收仍未闭环。**
+- 分支：`agent/phase-1-auth`；
+- 提交 / PR：`3cbdeee feat(auth): complete phase one authentication`、`6f5d609 ci: enable PostgreSQL data checksums`；[Draft PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1)。
 
-本次完成：
+#### 完成内容
 
 - 增加 `ACTIVE`、`DISABLED`、`DEPARTED`、`ARCHIVED` 账号生命周期及数据库一致性约束；
 - 增加 Profile 和 `LAB_MEMBER`、`REIMBURSEMENT_ADMIN`、`SYSTEM_ADMIN` 固定系统角色；
 - 实现登录、POST-only 退出、首次强制改密、个人改密和管理员一次性临时密码；
 - 实现 12 位密码下限、12 小时 Session、关闭浏览器失效和旧 Session 失效；
-- 实现用户名 HMAC 指纹 + 来源 IP 的五次失败/十五分钟登录限制；
+- 实现用户名 HMAC 指纹、来源 IP 和五次失败/十五分钟登录限制；
 - 实现登录、退出、密码、账号状态、角色和资料变更的脱敏 append-only 审计；
 - 增加管理后台、基础页面、数据库迁移和 Phase 1 执行报告；
-- 修正 GitHub Actions 的 PostgreSQL 初始化参数，使 CI 同样启用数据页校验和。
+- 修正 GitHub Actions 的 PostgreSQL 初始化参数，使 CI 启用数据页校验和。
 
-验证结果：
+#### 验证结果
 
 - `scripts/check.zsh`：通过；
-- pytest：29 项通过；
-- 总覆盖率：89%；
-- Django system check：0 issues；
-- migration drift：No changes detected；
+- pytest：29 项通过，覆盖率 89%；
+- Django system check：0 issues；migration drift：No changes detected；
 - Ruff check / format：通过；
 - 本机 PostgreSQL 17：`accounts.0002` 和 `audit.0001` 已应用；
-- GitHub Actions：通过，耗时 41 秒。
+- GitHub Actions：通过，最初记录耗时 41 秒；后续 `119e209` 推送后再次通过，耗时 34 秒。
 
-未闭环事项：
+#### 未完成 / 遗留问题
 
-- `INTERNAL` / `RESTRICTED` 项目访问依赖 Phase 2 的项目、成员和访问申请模型；
-- “报销管理员不能因角色访问受限项目档案”需要 Phase 2 项目权限与 Phase 4 报销权限联合测试；
-- Docker、管理员 MFA、反向代理真实来源 IP 和服务器部署仍按计划保留到后续阶段。
+- INTERNAL / RESTRICTED 项目访问依赖 Phase 2 的项目、成员和访问申请模型；
+- “报销管理员不能因角色访问受限项目档案”依赖 Phase 2 项目权限与 Phase 4 报销权限联合测试；
+- Docker、管理员 MFA、反向代理真实来源 IP 和服务器部署保留到后续阶段；
+- Draft PR #1 尚未合并到 `main`。
 
-下一步：商议并冻结 Phase 2 的项目字段、项目内角色、可见性、访问申请状态机和权限矩阵，再开始项目系统实现。
+#### 下一步
 
-### 2026-08-10 — 建立本地进度追踪机制
+冻结并实现 Phase 2 的项目字段、项目内角色、可见性、访问申请状态机和权限矩阵。
 
-- 状态：完成；
-- 本次完成：建立根目录 `taskline.md`，定义每个任务完成后的记录字段，并把该步骤写入总体开发流程和 README 目录说明；
-- 验证：核对 Phase 1 本地测试、远端 CI、提交和 PR 证据后写入首条完整记录；
-- 未完成：本次进度文档修改尚未提交或推送；
-- 下一步：后续每个可交付任务在交付前先更新本文件。
+### 2026-08-10 — Phase 0：工程基础
+
+- 状态：**本机工程基础已验证；Docker 和跨环境验收未闭环，不能标记为 Phase 0 全部完成。**
+- 分支：历史工程基础工作；
+- 提交 / PR：历史提交包括 `8cd4076`、`15ce6dd`、`810ccb3`；无独立 Phase 0 PR 记录。
+
+#### 完成内容
+
+- 建立 Django 工程、基础应用、配置分层、健康检查和工程检查脚本；
+- 建立本机 Conda `labarchive` 环境及 PostgreSQL 17 开发路径；
+- 固定 Python 3.13.14、Django 5.2.16 等基础依赖并记录校验信息；
+- 完成基础本机 Web / health 路径和 Phase 0 报告。
+
+#### 验证结果
+
+- 本机 pytest：6 项通过，覆盖率 85%；
+- 本机 Django / PostgreSQL 基础路径、Web 和 health 检查通过；
+- 详细证据保留在 `docs/PHASE0_REPORT.md`。
+
+#### 未完成 / 遗留问题
+
+- Docker 路径未验证；
+- 第二套全新环境验证仅部分完成；
+- 恶意文件扫描、服务器部署和生产级备份恢复属于后续阶段；
+- Phase 0 报告生成时 CI 尚未验证，后续 Phase 1 已建立并通过 CI，但不能据此追溯宣称 Phase 0 Docker 验收完成。
+
+#### 下一步
+
+在对应后续阶段分别完成 Docker、跨环境、文件安全、部署及备份恢复验收，不与本机工程基础验证混为同一完成状态。
+
+## 5. Taskline 更新规则
+
+1. 每次新 Codex 开发线程开始前，应先读取 `Line.md` 和 `taskline.md`，并检查 Git 实际状态。
+2. `taskline.md` 顶部“当前状态快照”必须反映最新状态，包括分支、基线、工作树、远端、PR 和验证级别。
+3. 每个可交付任务完成后，应更新当前状态快照，并在“工作历史”顶部追加一条记录。
+4. 历史记录不因为后续状态变化而覆盖；结论变化时应追加“更正记录”并说明证据。
+5. 如果 `taskline.md`、`Line.md` 和代码不一致：实际代码和测试结果用于判断“当前实现事实”，`Line.md` 用于判断“应该达到什么状态”，随后修正 `taskline.md`。
+6. 不得仅因为代码存在就标记任务完成；必须区分未开始、进行中、功能实现完成但未验证、本地验证完成、CI 验证完成、跨阶段验收待办和完成。
+7. 未执行的测试、迁移、CI、UI 或环境验证必须明确记录“未运行”或“未验证”。
+8. 不得把后续 Phase 的实现或验收提前标记为当前 Phase 已完成。
+
+每条历史记录原则上包含：
+
+- 日期、Phase 或任务名称、状态；
+- 分支、提交和 PR；
+- 完成内容；
+- 实际运行的验证及结果；
+- 未完成、遗留问题和跨 Phase 依赖；
+- 下一步。

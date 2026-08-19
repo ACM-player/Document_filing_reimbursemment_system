@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}项目成员 · {{ project.project_code }}{% endblock %}
+
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">{{ project.project_code }}</p>
+      <h1>管理项目成员</h1>
+    </div>
+    <a href="{% url 'projects:detail' project.pk %}">返回项目</a>
+  </div>
+
+  <section class="card">
+    <h2>添加或更新成员</h2>
+    <p>项目负责人只能由系统管理员在项目编辑页更换。</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">保存成员角色</button>
+    </form>
+  </section>
+
+  <section class="card section-gap table-card">
+    <h2>当前成员</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>成员</th><th>角色</th><th>授权来源</th><th>到期</th><th>操作</th></tr></thead>
+        <tbody>
+          {% for item in memberships %}
+            <tr>
+              <td>{{ item.user }}</td>
+              <td>{{ item.get_role_display }}</td>
+              <td>{{ item.get_access_source_display }}</td>
+              <td>{{ item.expires_at|default:"长期" }}</td>
+              <td>
+                {% if item.role != "PI" %}
+                  <form method="post" action="{% url 'projects:member_remove' project.pk item.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="danger-button compact-button">移除</button>
+                  </form>
+                {% else %}
+                  负责人不可移除
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

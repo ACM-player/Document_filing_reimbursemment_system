@@ -86,6 +86,11 @@ OR
 
 账号状态、临时密码重置和角色分配只能通过统一账号服务更新。V1 预定义 `LAB_MEMBER`、`REIMBURSEMENT_ADMIN`、`SYSTEM_ADMIN` 三个 Group；角色定义通过受版本控制的 `post_migrate` 初始化器管理，不开放任意 Permission 编辑。
 
+`DISABLED` 只暂停认证和权限行使，不关闭项目关系；恢复 ACTIVE 时先归一化已自然到期的申请授权。
+`DEPARTED` / `ARCHIVED` 是不可逆终态，统一账号服务会在账号状态及审计的同一事务中结束所有活动
+Membership，并取消 PENDING / APPROVED 访问申请。未软删除项目的规范 PI 必须先转移。终止账号不
+覆盖原审批人的 `reviewed_by` / `reviewed_at` / `review_note`；关闭操作者与原因保存在追加式审计中。
+
 ### 4.2 `accounts_userprofile`
 
 | 字段 | 类型 | 规则 |
@@ -130,9 +135,17 @@ OR
 | `role` | varchar | PI、MANAGER、MEMBER、VIEWER |
 | `joined_at` / `left_at` | timestamptz | 成员生命周期 |
 | `access_source` | varchar | DIRECT、APPROVED_REQUEST |
+| `source_access_request_id` | AccessRequest 一对一 FK | 申请授权必填，直接授权为空，`PROTECT` |
 | `expires_at` | timestamptz | 访问申请产生的临时成员可空到期时间 |
 
-约束：同一项目同一用户只能有一条活动成员记录。到期或离组成员不再提供访问权限。V1 不增加成员例外 Boolean；如未来增加，必须明确表达“继承/允许/拒绝”。
+约束：同一项目同一用户只能有一条活动成员记录。`DIRECT` 不关联申请且永不过期；
+`APPROVED_REQUEST` 必须一对一关联具体申请且只能授予 `VIEWER`。申请授权被直接晋升时结束旧行并
+新建 `DIRECT` 行，不改写历史来源。到期或离组成员不再提供访问权限。V1 不增加成员例外 Boolean；
+如未来增加，必须明确表达“继承/允许/拒绝”。
+
+`Project.principal_investigator_id` 是负责人规范事实，PI Membership 是物化授权。数据库保证活动
+PI 至多一条以及 PI 的 DIRECT/永久授权形状；负责人 FK 与 PI Membership 用户相等属于跨表不变量，
+由项目创建、负责人转移事务和回归测试保证，冲突时权限安全失败。
 
 ### 5.4 `projects_projectaccessrequest`
 
@@ -148,7 +161,15 @@ OR
 | `requested_at` / `reviewed_at` | timestamptz | 状态时间 |
 | `expires_at` | timestamptz | 可空；批准后可限制期限 |
 
-PostgreSQL 条件唯一约束：同一用户对同一项目在 `status=PENDING` 时最多一条申请。批准必须在同一事务中创建或更新 `VIEWER` ProjectMembership，并写入审计，但不得降低已有 PI、MANAGER 或 MEMBER 角色；撤销、到期和用户离组后该申请产生的访问失效。
+PostgreSQL 条件唯一约束：同一用户对同一项目在 `status=PENDING` 时最多一条申请。批准必须在同一
+事务中创建一条精确绑定该申请的 `VIEWER` ProjectMembership 并写入审计；已有直接成员时，待处理
+申请应被直接授权流程取消，陈旧审批不得创建无来源授权。撤销和到期只结束该申请绑定的 Membership；
+直接晋升保留旧授权行并创建新的 DIRECT 行。用户永久离组时 PENDING / APPROVED 申请与所有活动
+Membership 在账号状态事务中关闭，原审批字段保持不变；DISABLED 则保留仍有效的授权。
+
+超过 `expires_at` 的 Membership 在权限查询中立即失效。项目管理页面和幂等管理命令
+`expire_project_access` 将对应申请持久化为 EXPIRED 并写审计；无人访问时的持续自动归一化仍依赖
+部署阶段配置并验证外部调度器。
 
 ## 6. 文件资产和项目文档
 

@@ -22,7 +22,7 @@ def create_profile_and_member_role(sender, instance, created, **kwargs):
 
 @receiver(post_migrate, dispatch_uid="accounts_seed_system_groups")
 def seed_system_groups(sender, **kwargs):
-    if sender.label not in {"accounts", "audit"}:
+    if sender.label not in {"accounts", "audit", "projects"}:
         return
 
     member_group, _ = Group.objects.get_or_create(name=LAB_MEMBER_GROUP)
@@ -32,21 +32,27 @@ def seed_system_groups(sender, **kwargs):
     member_group.permissions.clear()
     reimbursement_group.permissions.clear()
 
-    desired_permissions = Permission.objects.filter(
-        content_type__app_label="accounts",
-        codename__in=(
-            "add_user",
-            "change_user",
-            "view_user",
-            "view_userprofile",
-            "change_userprofile",
-            "reset_user_password",
-            "change_user_status",
-            "assign_system_roles",
-        ),
-    ) | Permission.objects.filter(
-        content_type__app_label="audit",
-        codename="view_auditlog",
+    desired_permissions = (
+        Permission.objects.filter(
+            content_type__app_label="accounts",
+            codename__in=(
+                "add_user",
+                "change_user",
+                "view_user",
+                "view_userprofile",
+                "change_userprofile",
+                "reset_user_password",
+                "change_user_status",
+                "assign_system_roles",
+            ),
+        )
+        | Permission.objects.filter(
+            content_type__app_label="audit",
+            codename="view_auditlog",
+        )
+        | Permission.objects.filter(
+            content_type__app_label="projects",
+        )
     )
     system_group.permissions.set(desired_permissions)
 
