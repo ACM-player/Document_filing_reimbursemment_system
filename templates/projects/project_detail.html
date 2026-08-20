@@ -10,6 +10,7 @@
       {% if project.short_name and full_access %}<p>{{ project.short_name }}</p>{% endif %}
     </div>
     <div class="action-row">
+      {% if full_access %}<a class="button-link" href="{% url 'documents:list' project.pk %}">项目档案</a>{% endif %}
       {% if can_edit %}<a class="button-link" href="{% url 'projects:update' project.pk %}">编辑项目</a>{% endif %}
       {% if can_manage_members %}<a class="button-link secondary" href="{% url 'projects:members' project.pk %}">管理成员</a>{% endif %}
     </div>

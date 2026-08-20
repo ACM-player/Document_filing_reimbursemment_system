@@ -2,7 +2,7 @@
 
 ## 1. 设计状态
 
-本文定义 V1 总体数据模型。Phase 0 代码只落地自定义用户和工程骨架；其他业务模型在对应 Phase 实现前必须再次核对本文、生成 migration 并补齐约束测试。
+本文定义 V1 总体数据模型。Phase 0 落地自定义用户和工程骨架；Phase 1–3 已分别落地账号、项目与项目文件模型。其他业务模型仍须在对应 Phase 实现前再次核对本文、生成 migration 并补齐约束测试。
 
 数据库目标为 PostgreSQL 17。开发和测试不使用 SQLite，避免条件唯一约束、全文搜索、并发锁和字段行为差异被掩盖。
 
@@ -183,18 +183,26 @@ Membership 在账号状态事务中关闭，原审批字段保持不变；DISABL
 | `relative_path` | varchar | 相对 `MEDIA_ROOT`，唯一 |
 | `declared_mime_type` | varchar | 客户端声明，可空 |
 | `detected_mime_type` | varchar | 服务端检测结果，可空 |
-| `file_size` | bigint | 大于 0，受上传上限限制 |
-| `sha256` | char(64) | 小写十六进制，建立索引但 V1 不唯一 |
+| `file_size` | bigint | TEMPORARY/QUARANTINED 可空；可用资产必须大于 0 且受上传上限限制 |
+| `sha256` | char(64) | TEMPORARY/QUARANTINED 可空白；可用资产必须为小写十六进制，建立索引但 V1 不唯一 |
 | `storage_status` | varchar | TEMPORARY、QUARANTINED、AVAILABLE、MISSING、DELETED |
+| `malware_scan_status` | varchar | NOT_CONFIGURED、PENDING、CLEAN、INFECTED、ERROR；不得伪造 CLEAN |
+| `status_reason` | varchar | 隔离、缺失或失败的非敏感原因代码，可空 |
+| `upload_token` | UUID | 一次性 POST 幂等 token，全局唯一 |
 | `uploaded_by_id` | User FK | `PROTECT` |
 | `created_at` | timestamptz | 必填 |
 | `quarantined_at` / `deleted_at` | timestamptz | 可空 |
 
 `stored_filename`、`relative_path`、`file_size`、`sha256` 在 AVAILABLE 后不可由普通更新流程修改。
+状态相关检查约束要求 AVAILABLE/MISSING/DELETED 具有完整的正数大小和 SHA256；TEMPORARY 允许校验元数据
+尚未形成，QUARANTINED 允许保留部分证据。`stored_filename` 和 `relative_path` 全局唯一，所有 key 由
+服务器生成且为相对路径。状态转换、扫描语义和 saga 见 ADR-0006。
 
 ### 6.2 `documents_documentcategory`
 
-`id`、`project_id`（系统公共类别时可空的方案需在 Phase 3 决定）、`code`、`name`、`is_active`、`sort_order`、时间字段。分类复用范围必须明确，避免公共类别与项目自定义类别重名混乱。
+`id`、`project_id`、`code`、`name`、`is_active`、`sort_order`、时间字段。`project_id IS NULL` 表示系统
+内置/全局分类，非空表示该项目自定义分类。全局范围和每个项目范围分别对大小写不敏感的 `code`、`name`
+建立唯一约束；停用保留历史引用，但不能用于新文档。分类所属项目在创建后不可通过受支持服务改写。
 
 ### 6.3 `documents_document`
 
@@ -215,6 +223,27 @@ Membership 在账号状态事务中关闭，原审批字段保持不变；DISABL
 | 时间与软删除字段 | timestamptz | 标准字段 |
 
 PostgreSQL 条件唯一约束：同一 `document_group_id` 在 `deleted_at IS NULL AND is_current` 时最多一条记录。
+同一 group 的 `version` 唯一且必须大于 0；`file_asset_id` 一对一。Phase 3 新上传均创建独立 group、
+`version=1`、`is_current=true`。PostgreSQL 约束触发器与服务层共同保证：分类必须启用，且只能是全局分类
+或与 Document 相同项目的自定义分类。Document 软删除与 FileAsset DELETED 状态同步，物理文件仍保留；
+恢复通过完整性和安全检查后才清除删除状态。
+
+### 6.4 Phase 3 migration 与运行状态
+
+Phase 3 结构由 `documents.0001_initial` 建立，并由 `audit.0003` / `audit.0004` 扩展文件生命周期和
+reconciliation 审计动作。CP7 页面与表单没有改变模型，因此没有新增 migration。当前本机开发库已应用：
+
+```text
+audit.0001–0004       [X]
+documents.0001        [X]
+```
+
+应用 `audit.0004` 前创建 `.local/backups/pre-phase3-cp6-20260820.dump`，SHA-256 为
+`19b50cc27a9fde3857d84e7b8f7751af4fef559e4d40a1b7d7284e8a08ee9cdf`，并通过
+`pg_restore --list` 验证目录可读。该证据是本机迁移前快照，不等同于服务器恢复演练。
+
+全局唯一 `upload_token` 的最终并发仲裁由 PostgreSQL 唯一约束承担；服务捕获冲突后锁定并复核 token
+归属，从而把同一 token 的并发 POST 收敛到同一 Document，而不是依赖有竞态的表单预查询。
 
 ## 7. 报销
 

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.project_code }} 档案 · LabArchive{% endblock %}
+
+{% block content %}
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">{{ project.project_code }}</p>
+      <h1>项目档案</h1>
+      <p><a href="{% url 'projects:detail' project.pk %}">返回 {{ project.name }}</a></p>
+    </div>
+    <div class="action-row">
+      {% if can_upload %}<a class="button-link" href="{% url 'documents:upload' project.pk %}">上传文档</a>{% endif %}
+      {% if can_manage_categories %}<a class="button-link secondary" href="{% url 'documents:category_create' project.pk %}">新建分类</a>{% endif %}
+      <a class="button-link secondary" href="{% url 'documents:recycle_bin' %}">文件回收站</a>
+    </div>
+  </div>
+
+  <section class="card table-card">
+    <h2>当前文档</h2>
+    {% if project.status == "ARCHIVED" %}<p class="notice">项目已归档，档案仅可查看和下载。</p>{% endif %}
+    {% if documents %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>文档</th><th>分类</th><th>状态</th><th>上传者</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for entry in documents %}
+              {% with document=entry.document %}
+                <tr>
+                  <td>
+                    <strong>{{ document.title }}</strong>
+                    <p class="file-meta">{{ document.file_asset.original_filename }} · {{ document.file_asset.file_size|filesizeformat }}</p>
+                    {% if document.description %}<p class="file-meta">{{ document.description }}</p>{% endif %}
+                  </td>
+                  <td>{{ document.category.name }}</td>
+                  <td><span class="status-label">{{ document.file_asset.get_storage_status_display }}</span></td>
+                  <td>{{ document.uploaded_by }}</td>
+                  <td>
+                    <div class="action-row">
+                      {% if document.file_asset.storage_status == "AVAILABLE" %}<a href="{% url 'documents:download' document.pk %}">下载</a>{% endif %}
+                      {% if entry.can_delete %}
+                        <form method="post" action="{% url 'documents:delete' project.pk document.pk %}" class="inline-form">
+                          {% csrf_token %}<button type="submit" class="danger-button compact-button">移入回收站</button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>当前项目还没有文档。</p>
+    {% endif %}
+  </section>
+{% endblock %}

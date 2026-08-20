@@ -2,7 +2,7 @@
 
 ## 1. 状态与目标
 
-本文是 Phase 0 架构基线。当前优先在开发者本机完成开发、自动化测试和个人试运行；核心流程稳定、备份恢复通过后，再进入实验室 Linux 服务器部署。
+本文是 Phase 0 建立并在后续 Phase 持续冻结的架构基线。当前优先在开发者本机完成开发、自动化测试和个人试运行；核心流程稳定、备份恢复通过后，再进入实验室 Linux 服务器部署。Phase 3 文件架构细节见 ADR-0006。
 
 长期优先级：
 
@@ -131,24 +131,63 @@ DISABLED -> DEPARTED
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Temporary: 接收上传
-    Temporary --> Quarantined: 类型异常或待扫描
-    Temporary --> Available: 校验通过并原子入库
-    Quarantined --> Available: 管理员确认或扫描通过
-    Available --> Missing: 完整性检查发现缺失
-    Available --> Deleted: 业务软删除且满足清理条件
-    Deleted --> [*]: 物理清理并留下审计
+    [*] --> TEMPORARY: 创建上传意图
+    TEMPORARY --> QUARANTINED: 类型异常、扫描未决或可恢复失败
+    TEMPORARY --> AVAILABLE: 校验、移动、复核和审计成功
+    TEMPORARY --> DELETED: 取消或过期清理
+    QUARANTINED --> AVAILABLE: 重新校验或扫描通过
+    QUARANTINED --> DELETED: 逻辑删除
+    AVAILABLE --> MISSING: 文件不存在或完整性失败
+    AVAILABLE --> DELETED: 文档软删除
+    MISSING --> AVAILABLE: 文件修复并完整校验
+    MISSING --> DELETED: 逻辑删除
+    DELETED --> AVAILABLE: 恢复并重新校验
+    DELETED --> MISSING: 恢复时文件缺失
+    DELETED --> QUARANTINED: 恢复时安全检查失败
 ```
 
 关键约束：
 
 - 物理文件名使用 UUID 与受控扩展名；
-- 数据库只保存相对于 `MEDIA_ROOT` 的路径；
+- 数据库只保存服务器生成、相对于受控存储根目录的 storage key；原始文件名仅用于显示；
 - 入库后不覆盖文件；替换即创建新资产或新版本；
 - SHA256 相同只提示，不在 V1 自动去重；
+- Phase 3 新上传建立独立 document group，固定 `version=1`、`is_current=true`，不提供替换 UI；
+- 白名单为 PDF、DOCX、XLSX、PNG、JPEG/JPG、ZIP，不支持 `.doc`、`.xls`；
+- 服务端使用二进制签名、OOXML 结构和 ZIP 安全规则识别真实类型，不信任客户端 MIME；
 - 上传目录不作为公开静态目录；
 - 生产下载由 Django 鉴权，再交给 Nginx 受控传输；
-- 数据库提交与文件移动失败时必须补偿，不能留下无主“正常”记录。
+- 数据库提交与文件移动使用持久化 TEMPORARY 状态、同文件系统原子移动、第二事务复核和幂等补偿；
+- stale staging、DB 缺文件和无 DB 文件由 reconciliation 报告或隔离，不静默删除；
+- 本地/CI 的确定性检查与生产恶意软件扫描分开记录；production 扫描不可用时 fail closed；
+- 只有未删除 Document 关联的 AVAILABLE FileAsset 可以下载；软删除保留物理字节，恢复重新校验；
+- 文件写锁序为 User → Project → Document/document group → FileAsset。
+
+Phase 3 CP2–CP7 已将上述边界落为可复用基础设施和页面：临时文件固定写入同文件系统的
+`LABARCHIVE_STAGING_ROOT/<asset_uuid>.part`，最终 key 由服务器生成成
+`projects/<project_uuid>/documents/<asset_prefix>/<asset_uuid>.<ext>`，流式写入同时限制大小并计算
+SHA256，最终发布拒绝覆盖已存在资产。所有测试使用独立临时目录，不写固定测试媒体目录。
+
+ZIP 检查在内存和磁盘上均不展开成员，但会受限流式读取每个成员以验证 CRC，并拒绝路径穿越、drive
+路径、反斜杠、加密、链接/特殊文件、重复路径、嵌套 ZIP 和超限压缩结构。上传、ZIP、OOXML 元数据阈值
+全部集中在 settings；DOCX/XLSX 还必须通过必要 XML 结构、主内容类型和无宏检查。扫描器通过 adapter
+返回独立事实；本地/CI 可以明确记录 `NOT_CONFIGURED`，production settings 无条件要求真实扫描结果为
+`CLEAN` 才允许后续服务发布。
+
+上传服务使用持久化 TEMPORARY 意图和全局唯一 token；发布前后均按规范锁序重新鉴权、复核最终文件
+大小与 SHA256，并在失败时保留可解释状态。下载只经鉴权 endpoint 打开受控文件，并在返回前对同一文件
+句柄复核大小与 SHA256；同大小篡改也会安全转为 MISSING。软删除保留物理字节，
+恢复会重新验证存在性、大小、SHA256、真实类型、扫描策略、权限和当前版本冲突。reconciliation 使用稳定
+task UUID 处理 stale TEMPORARY、AVAILABLE/MISSING 修复和可补偿 staging 清理；未知最终 orphan 只报告，
+不自动删除。production 未配置真实扫描器时，任何可能改变文件状态的 reconciliation 在开始前 fail closed。
+
+CP7 页面只调用上述服务：项目档案列表、上传、鉴权下载、软删除、项目级分类创建、回收站和恢复。
+所有文件写入口为 CSRF 保护的 POST，并在解析项目/文档 UUID 前先检查项目门户资格。归档项目仅可查看和
+下载；软删除项目不进入正常查询。Phase 3 不提供永久删除或版本替换页面。
+
+全局分类 `project=NULL` 由 SYSTEM_ADMIN 管理；项目自定义分类由该项目 PI、MANAGER 或 SYSTEM_ADMIN
+管理。新文档只能使用启用的全局分类或本项目分类。完整事务、状态、权限和 ZIP 规则见
+[ADR-0006](adr/0006-phase3-file-storage-security.md)。
 
 ## 8. 报销状态机
 
@@ -190,14 +229,15 @@ DRAFT / RETURNED -> CANCELLED
 | Conda 环境 | `labarchive` | 已确认 |
 | Python | 3.13.x | 已确认，跟随安全微版本 |
 | 数据库 | PostgreSQL 17.10 | 已安装并完成本地 migration 与测试 |
-| 单文件上限 | 100 MiB | 待真实文件样本验证 |
+| 单文件上限 | 100 MiB | Phase 3 已实现边界和超限回归；未以 100 MiB 现场样本做性能基准 |
+| ZIP 安全门禁 | 总展开 1 GiB、单成员 256 MiB、100:1、10,000 成员、拒绝嵌套 ZIP | Phase 3 已实现并通过安全样本回归 |
 | 账号创建 | 管理员创建、线下临时密码、首次登录强制改密 | 已确认 |
 | 项目文件可见性 | INTERNAL 默认内部只读；RESTRICTED 申请访问 | 已确认 |
 | Session | 12 小时、关闭浏览器失效 | 已确认 |
 | 回收站保留 | 暂定 90 天，V1 默认不自动物理删除 | 待业务确认 |
 | RPO | 本地试运行暂定 24 小时 | 正式部署前确认 |
 | RTO | 本地试运行暂定 1 个工作日 | 正式部署前确认 |
-| 恶意文件扫描 | 接口预留，生产启用方案待定 | 上线前阻塞项 |
+| 恶意文件扫描 | adapter 与 fail-closed 语义已冻结；生产扫描器待选择 | 上线前阻塞项；不得把未配置记录为扫描通过 |
 | 生产服务器 | 未选择 | 服务器阶段确认 |
 
 ## 12. 服务器部署准入

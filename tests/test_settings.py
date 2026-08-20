@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 import uuid
 
 import pytest
@@ -8,6 +11,53 @@ from django.db import connection, models
 
 def test_postgresql_is_the_only_configured_database_backend():
     assert settings.DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql"
+
+
+def test_phase_three_file_security_defaults_are_centralized():
+    assert settings.LABARCHIVE_ALLOWED_UPLOAD_EXTENSIONS == (
+        ".pdf",
+        ".docx",
+        ".xlsx",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".zip",
+    )
+    assert settings.LABARCHIVE_MAX_UPLOAD_SIZE > 0
+    assert settings.LABARCHIVE_ZIP_MAX_TOTAL_SIZE >= settings.LABARCHIVE_ZIP_MAX_MEMBER_SIZE
+    assert settings.LABARCHIVE_ZIP_MAX_MEMBER_SIZE >= settings.LABARCHIVE_MAX_UPLOAD_SIZE
+    assert settings.LABARCHIVE_ZIP_MAX_COMPRESSION_RATIO > 0
+    assert settings.LABARCHIVE_ZIP_MAX_MEMBERS > 0
+    assert settings.LABARCHIVE_OOXML_METADATA_MAX_SIZE > 0
+    assert settings.LABARCHIVE_STAGING_MAX_AGE_SECONDS > 0
+    assert settings.LABARCHIVE_REQUIRE_MALWARE_SCAN is False
+    assert settings.LABARCHIVE_STAGING_ROOT.is_absolute()
+
+
+def test_production_forces_malware_scan_even_if_environment_requests_false():
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "DJANGO_SETTINGS_MODULE": "config.settings.production",
+            "LABARCHIVE_SECRET_KEY": "production-test-secret-that-is-not-used-for-real-data",
+            "LABARCHIVE_REQUIRE_MALWARE_SCAN": "false",
+        }
+    )
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from django.conf import settings; assert settings.LABARCHIVE_REQUIRE_MALWARE_SCAN",
+        ],
+        cwd=settings.BASE_DIR,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_custom_user_is_configured_before_first_migration():

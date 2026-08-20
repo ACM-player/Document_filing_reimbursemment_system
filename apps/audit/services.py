@@ -1,5 +1,6 @@
 import ipaddress
 from typing import Any
+from uuid import UUID
 
 from django.http import HttpRequest
 
@@ -26,6 +27,7 @@ def record_audit_event(
     old_value: dict[str, Any] | None = None,
     new_value: dict[str, Any] | None = None,
     result: AuditResult | str = AuditResult.SUCCESS,
+    task_id: UUID | None = None,
 ) -> AuditLog:
     object_type = ""
     object_id = ""
@@ -33,7 +35,7 @@ def record_audit_event(
         object_type = subject._meta.label
         object_id = str(subject.pk)
 
-    request_id = getattr(request, "request_id", None) if request is not None else None
+    request_id = (getattr(request, "request_id", None) if request is not None else None) or task_id
     user_agent = request.META.get("HTTP_USER_AGENT", "")[:512] if request else ""
 
     return AuditLog.objects.create(

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}新建文档分类 · LabArchive{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">{{ project.project_code }}</p>
+    <h1>新建项目文档分类</h1>
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="action-row">
+        <button type="submit">创建分类</button>
+        <a href="{% url 'documents:list' project.pk %}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}
