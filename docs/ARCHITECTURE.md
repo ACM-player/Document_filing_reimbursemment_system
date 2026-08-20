@@ -163,7 +163,7 @@ stateDiagram-v2
 - 只有未删除 Document 关联的 AVAILABLE FileAsset 可以下载；软删除保留物理字节，恢复重新校验；
 - 文件写锁序为 User → Project → Document/document group → FileAsset。
 
-CP2 已将上述边界落为可复用基础设施：临时文件固定写入同文件系统的
+Phase 3 CP2–CP7 已将上述边界落为可复用基础设施和页面：临时文件固定写入同文件系统的
 `LABARCHIVE_STAGING_ROOT/<asset_uuid>.part`，最终 key 由服务器生成成
 `projects/<project_uuid>/documents/<asset_prefix>/<asset_uuid>.<ext>`，流式写入同时限制大小并计算
 SHA256，最终发布拒绝覆盖已存在资产。所有测试使用独立临时目录，不写固定测试媒体目录。
@@ -173,6 +173,16 @@ ZIP 检查在内存和磁盘上均不展开成员，但会受限流式读取每�
 全部集中在 settings；DOCX/XLSX 还必须通过必要 XML 结构、主内容类型和无宏检查。扫描器通过 adapter
 返回独立事实；本地/CI 可以明确记录 `NOT_CONFIGURED`，production settings 无条件要求真实扫描结果为
 `CLEAN` 才允许后续服务发布。
+
+上传服务使用持久化 TEMPORARY 意图和全局唯一 token；发布前后均按规范锁序重新鉴权、复核最终文件
+大小与 SHA256，并在失败时保留可解释状态。下载只经鉴权 endpoint 打开受控文件。软删除保留物理字节，
+恢复会重新验证存在性、大小、SHA256、真实类型、扫描策略、权限和当前版本冲突。reconciliation 使用稳定
+task UUID 处理 stale TEMPORARY、AVAILABLE/MISSING 修复和可补偿 staging 清理；未知最终 orphan 只报告，
+不自动删除。production 未配置真实扫描器时，任何可能改变文件状态的 reconciliation 在开始前 fail closed。
+
+CP7 页面只调用上述服务：项目档案列表、上传、鉴权下载、软删除、项目级分类创建、回收站和恢复。
+所有文件写入口为 CSRF 保护的 POST，并在解析项目/文档 UUID 前先检查项目门户资格。归档项目仅可查看和
+下载；软删除项目不进入正常查询。Phase 3 不提供永久删除或版本替换页面。
 
 全局分类 `project=NULL` 由 SYSTEM_ADMIN 管理；项目自定义分类由该项目 PI、MANAGER 或 SYSTEM_ADMIN
 管理。新文档只能使用启用的全局分类或本项目分类。完整事务、状态、权限和 ZIP 规则见
@@ -218,8 +228,8 @@ DRAFT / RETURNED -> CANCELLED
 | Conda 环境 | `labarchive` | 已确认 |
 | Python | 3.13.x | 已确认，跟随安全微版本 |
 | 数据库 | PostgreSQL 17.10 | 已安装并完成本地 migration 与测试 |
-| 单文件上限 | 100 MiB | 待真实文件样本验证 |
-| ZIP 安全门禁 | 总展开 1 GiB、单成员 256 MiB、100:1、10,000 成员、拒绝嵌套 ZIP | Phase 3 已冻结，后续实现与样本验证 |
+| 单文件上限 | 100 MiB | Phase 3 已实现边界和超限回归；未以 100 MiB 现场样本做性能基准 |
+| ZIP 安全门禁 | 总展开 1 GiB、单成员 256 MiB、100:1、10,000 成员、拒绝嵌套 ZIP | Phase 3 已实现并通过安全样本回归 |
 | 账号创建 | 管理员创建、线下临时密码、首次登录强制改密 | 已确认 |
 | 项目文件可见性 | INTERNAL 默认内部只读；RESTRICTED 申请访问 | 已确认 |
 | Session | 12 小时、关闭浏览器失效 | 已确认 |

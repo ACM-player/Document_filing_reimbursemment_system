@@ -2,7 +2,7 @@
 
 课题组科研事务、报销与数字档案管理平台。
 
-当前阶段：**Phase 1 / Phase 2 已合并并完成各自范围的本地验收与远端 CI；Phase 3 文件档案系统已进入开发**。仍以本地开发和个人试运行为主，尚未进入报销业务或实验室服务器部署阶段。
+当前阶段：**Phase 1 / Phase 2 已合并并完成各自范围的本地验收与远端 CI；Phase 3 文件档案系统已完成本地实现和独立验收，尚无 Phase 3 远端 CI / PR 证据**。仍以本地开发和个人试运行为主，尚未进入报销业务或实验室服务器部署阶段。
 
 ## 技术基线
 
@@ -119,4 +119,4 @@ compose.yaml          本地 Docker Compose
 
 Phase 1 已实现账号生命周期、预定义系统角色、认证和审计基础。Phase 2 已实现项目类型、项目 CRUD、项目成员、`INTERNAL` / `RESTRICTED` 访问控制、访问申请生命周期、账号离组撤权、精确授权血缘及关键操作审计；本机 PostgreSQL migration、132 项综合测试、五条真实事务并发链和多角色浏览器流程均已通过。
 
-Phase 1 / Phase 2 的 PR 均已合并，最新 Phase 1 / Phase 2 收口 `main` CI 已通过。Phase 3 已按独立 checkpoint 完成架构冻结、文件模型/权限，以及受控 staging、SHA256、真实类型/ZIP/OOXML 校验和扫描 adapter 基础设施；完整上传 saga、下载、回收站与 UI 仍在后续 Phase 3 checkpoint。报销与附件联合权限仍属于 Phase 4；外部到期调度、Docker 和生产部署验收保留到对应后续阶段。当前证据和边界见 [taskline.md](taskline.md) 与 [Phase 2 执行报告](docs/PHASE2_REPORT.md)，历史阶段结果见 [Phase 1 执行报告](docs/PHASE1_REPORT.md) 与 [Phase 0 执行报告](docs/PHASE0_REPORT.md)。
+Phase 1 / Phase 2 的 PR 均已合并，最新 Phase 1 / Phase 2 收口 `main` CI 已通过。Phase 3 已按 CP0–CP7 完成架构冻结、文件模型/权限、安全存储与真实类型校验、可恢复上传 saga、鉴权下载、软删除/恢复、reconciliation、真实 PostgreSQL 并发和项目档案页面；PDF、DOCX、XLSX、PNG、JPEG、ZIP 联合样本及桌面/移动浏览器流程已本地验收。Phase 3 分支尚未推送，不能把本地结果表述为远端 CI 或 PR 通过。报销与附件联合权限仍属于 Phase 4；外部到期调度、真实生产恶意软件扫描、Docker 和生产部署验收保留到对应后续阶段。当前证据和边界见 [Phase 3 执行报告](docs/PHASE3_REPORT.md)、[taskline.md](taskline.md) 与历史 [Phase 2 执行报告](docs/PHASE2_REPORT.md)。

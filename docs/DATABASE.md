@@ -2,7 +2,7 @@
 
 ## 1. 设计状态
 
-本文定义 V1 总体数据模型。Phase 0 代码只落地自定义用户和工程骨架；其他业务模型在对应 Phase 实现前必须再次核对本文、生成 migration 并补齐约束测试。
+本文定义 V1 总体数据模型。Phase 0 落地自定义用户和工程骨架；Phase 1–3 已分别落地账号、项目与项目文件模型。其他业务模型仍须在对应 Phase 实现前再次核对本文、生成 migration 并补齐约束测试。
 
 数据库目标为 PostgreSQL 17。开发和测试不使用 SQLite，避免条件唯一约束、全文搜索、并发锁和字段行为差异被掩盖。
 
@@ -227,6 +227,23 @@ PostgreSQL 条件唯一约束：同一 `document_group_id` 在 `deleted_at IS NU
 `version=1`、`is_current=true`。PostgreSQL 约束触发器与服务层共同保证：分类必须启用，且只能是全局分类
 或与 Document 相同项目的自定义分类。Document 软删除与 FileAsset DELETED 状态同步，物理文件仍保留；
 恢复通过完整性和安全检查后才清除删除状态。
+
+### 6.4 Phase 3 migration 与运行状态
+
+Phase 3 结构由 `documents.0001_initial` 建立，并由 `audit.0003` / `audit.0004` 扩展文件生命周期和
+reconciliation 审计动作。CP7 页面与表单没有改变模型，因此没有新增 migration。当前本机开发库已应用：
+
+```text
+audit.0001–0004       [X]
+documents.0001        [X]
+```
+
+应用 `audit.0004` 前创建 `.local/backups/pre-phase3-cp6-20260820.dump`，SHA-256 为
+`19b50cc27a9fde3857d84e7b8f7751af4fef559e4d40a1b7d7284e8a08ee9cdf`，并通过
+`pg_restore --list` 验证目录可读。该证据是本机迁移前快照，不等同于服务器恢复演练。
+
+全局唯一 `upload_token` 的最终并发仲裁由 PostgreSQL 唯一约束承担；服务捕获冲突后锁定并复核 token
+归属，从而把同一 token 的并发 POST 收敛到同一 Document，而不是依赖有竞态的表单预查询。
 
 ## 7. 报销
 
