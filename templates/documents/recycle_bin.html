@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}文件回收站 · LabArchive{% endblock %}
+
+{% block content %}
+  <div class="page-heading">
+    <div><p class="eyebrow">Document recycle bin</p><h1>文件回收站</h1></div>
+    <a class="button-link secondary" href="{% url 'projects:list' %}">返回项目</a>
+  </div>
+  <section class="card table-card">
+    <h2>可恢复文档</h2>
+    <p>仅显示你当前有权恢复的未归档项目文档；物理文件会在恢复时重新校验。</p>
+    {% if documents %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>项目</th><th>文档</th><th>删除时间</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for document in documents %}
+              <tr>
+                <td>{{ document.project.project_code }}</td>
+                <td>{{ document.title }}<p class="file-meta">{{ document.file_asset.original_filename }}</p></td>
+                <td>{{ document.deleted_at }}</td>
+                <td>
+                  <form method="post" action="{% url 'documents:restore' document.pk %}">
+                    {% csrf_token %}<button type="submit" class="compact-button">恢复</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}<p>回收站中没有你可以恢复的文档。</p>{% endif %}
+  </section>
+{% endblock %}

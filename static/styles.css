@@ -57,6 +57,9 @@ th { background: #edf3f8; }
 .danger-button { background: #a51d28; }
 .secondary-button { background: #53697d; }
 .compact-button { padding: 6px 10px; }
+.status-label { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #e8eef4; font-size: .85rem; white-space: nowrap; }
+.muted { color: #5d6874; }
+.file-meta { margin: 4px 0 0; color: #5d6874; font-size: .9rem; }
 
 @media (max-width: 680px) {
   .site-header { align-items: flex-start; padding-block: 16px; flex-direction: column; }

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}上传文档 · LabArchive{% endblock %}
+
+{% block content %}
+  <section class="card">
+    <p class="eyebrow">{{ project.project_code }}</p>
+    <h1>上传项目文档</h1>
+    <p class="notice">允许 PDF、DOCX、XLSX、PNG、JPEG 和 ZIP。系统会按真实内容校验类型与完整性。</p>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="action-row">
+        <button type="submit">上传</button>
+        <a href="{% url 'documents:list' project.pk %}">取消</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

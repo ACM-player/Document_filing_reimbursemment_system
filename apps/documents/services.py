@@ -26,6 +26,7 @@ from .models import (
     FileStorageStatus,
 )
 from .permissions import (
+    can_manage_project_document_categories,
     can_restore_document,
     can_soft_delete_document,
     can_upload_documents,
@@ -73,6 +74,49 @@ class DocumentLifecycleError(Exception):
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
+
+
+@transaction.atomic
+def create_project_document_category(
+    *,
+    actor,
+    project: Project,
+    code: str,
+    name: str,
+    sort_order: int = 0,
+    http_request=None,
+) -> DocumentCategory:
+    locked_actor = _lock_actor(actor)
+    if not is_project_portal_user(locked_actor):
+        raise PermissionDenied("当前账号无权进入项目文件系统。")
+    locked_project = _lock_projects({getattr(project, "pk", None)})[project.pk]
+    if not can_manage_project_document_categories(locked_actor, locked_project):
+        raise PermissionDenied("当前账号无权管理该项目的文档分类。")
+
+    category = DocumentCategory(
+        project=locked_project,
+        code=code,
+        name=name,
+        sort_order=sort_order,
+    )
+    category.full_clean()
+    try:
+        category.save(force_insert=True)
+    except IntegrityError as exc:
+        raise ValidationError("分类代码或名称已在本项目中使用。") from exc
+    record_audit_event(
+        action=AuditAction.PROJECT_UPDATED,
+        request=http_request,
+        actor=locked_actor,
+        subject=locked_project,
+        description="创建项目文档分类",
+        new_value={
+            "document_category_id": str(category.pk),
+            "code": category.code,
+            "name": category.name,
+        },
+    )
+    return category
 
 
 @dataclass(frozen=True)
