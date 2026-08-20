@@ -8,11 +8,11 @@
 
 ### 1.1 当前开发阶段
 
-- 当前 Phase：Phase 1 / Phase 2 交付收口完成；Phase 3 的 CP0–CP6 均已完成；下一 checkpoint 为 CP7 页面、真实样本与 Phase 3 最终验收；
-- 当前状态：**Phase 1 / Phase 2 已合并并完成独立范围本地验收及远端 CI；Phase 3 的 CP0–CP6 已实现并通过当前 276 项 PostgreSQL 全量回归；CP7 尚未开始。**
+- 当前 Phase：Phase 1 / Phase 2 交付收口完成；Phase 3 的 CP0–CP7 已完成本地实现、最终文档和独立验收；当前停止，不进入 Phase 4；
+- 当前状态：**Phase 1 / Phase 2 已合并并完成独立范围本地验收及远端 CI；Phase 3 CP0–CP7 已实现，当前 297 项 PostgreSQL 全量回归、真实多格式样本和隔离浏览器验收通过；Phase 3 分支尚无远端 CI / PR 证据。**
 - 当前 Git 分支：`agent/phase-3-files`，基线为最新 `main` `a203107c44ef9870161a49893de85959af4d77e2`；
 - Phase 2 实现 commit：`5c68b403 feat(projects): complete phase two project system`，父提交为 Phase 1 的 `119e209`；
-- 工作树：CP6 实现已提交为 `e4a937a feat(documents): reconcile file storage safely`；本条 CP6 交接记录将作为独立 docs checkpoint 提交；
+- 工作树：CP7 实现已提交为 `3ca19ec feat(documents): complete project archive pages`，最终报告/架构文档已提交为 `f866877 docs: close phase three local acceptance`；本条为最终 taskline 交接；
 - 远端状态：Phase 1 / Phase 2 分支提交及两个 merge commit 均已进入 `origin/main`；`main`、`origin/main` 与 Phase 3 分支起点均为 `a203107`；Phase 3 分支尚未推送；
 - PR：[PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 已以 merge commit `ad3181c` 合并；[PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 已在 base 调整为 `main` 后以 merge commit `0fccbb8` 合并；
 - GitHub Actions：PR #1 head CI `31371151159`、PR #2 head CI `32256185247`、Phase 1 merge 后 main CI `32257435132`、Phase 2 merge 后 main CI `32257797190`、最新 main 收口 CI `32258148559` 均为 success；
@@ -25,7 +25,7 @@
 | Phase 0 | 本地验证完成；跨环境验收待办 | 本机 Conda + PostgreSQL 工程路径已验证；Docker 和第二套完整环境仍未闭环，不能标记为全部完成。 |
 | Phase 1 | 本地验证、CI、最终 review 与 PR 合并完成；项目文件跨阶段验收已本地完成 | 账号、认证、系统角色和审计核心范围已进入 `main`；Phase 2 项目级权限联动及 Phase 3 真实项目文件下载已本地验收，报销附件联动待 Phase 4；PR #1 已合并。 |
 | Phase 2 | 可独立实现范围本地验收、CI、最终 review 与 PR 合并完成；真实文件下载联合权限已在 Phase 3 本地完成 | 项目元数据、可见性、成员、访问申请及项目级权限决策已通过 132 项 PostgreSQL 综合测试、五条真实事务并发链、migration、多角色浏览器流程及 PR/main CI；PR #2 已合并。真实 Document / FileAsset 下载边界已由 CP4 的真实字节联合回归补齐。 |
-| Phase 3 | CP0–CP6 已完成并通过当前完整门禁 | 已冻结架构，实现模型/权限/迁移、安全存储、可恢复上传、鉴权下载、生命周期、reconciliation、故障补偿和真实并发；CP6 38 项重点测试、7 项并发三轮复跑、276 项 PostgreSQL 全量回归和 88% coverage 通过。档案页面与真实格式样本保留到 CP7。 |
+| Phase 3 | CP0–CP7 本地实现和独立验收完成；远端交付未执行 | 已冻结并实现模型/权限/迁移、安全存储、可恢复上传、鉴权下载、生命周期、reconciliation、真实并发和完整档案页面；21 项 CP7 页面/多格式测试、297 项 PostgreSQL 全量回归、88% coverage 及桌面/移动隔离浏览器验收通过。 |
 | Phase 4–10 | 未开始 | 报销附件、导出、备份恢复和生产部署仍保留到对应后续 Phase。 |
 
 ### 1.3 当前正在处理
@@ -41,6 +41,8 @@
 9. CP5 已实现权限对称的软删除、回收站查询和安全恢复；恢复复核物理存在、大小、SHA256、服务端类型、扫描、当前权限和文档组冲突，失败安全转为 MISSING 或 QUARANTINED。
 10. CP6 已实现带稳定 task ID 的 reconciliation：恢复 stale TEMPORARY、核验 AVAILABLE/MISSING、报告不删除未知最终 orphan，并以可补偿流程清理过期 staging；生产无真实扫描器时在任何状态变更前 fail closed。
 11. CP6 已修复全局 upload token 并发仲裁及上传发布/恢复的最终 symlink、大小和 SHA256 复核，并完成上传/删除/恢复与归档/禁用、重复 token 和并发 reconciliation 的 PostgreSQL 线程回归。
+12. CP7 已实现项目档案列表、项目级分类、上传、鉴权下载、软删除、回收站和恢复页面；所有写入口复用服务并受 POST/CSRF、门户先验判断和锁后鉴权保护。
+13. CP7 已以 PDF、DOCX、XLSX、PNG、JPEG、ZIP 六类真实结构样本验证上传、重新下载和 SHA256，并完成隔离 testserver 桌面/移动浏览器流程；临时测试库和文件已精确清理。
 
 ### 1.4 高优先级问题闭环状态
 
@@ -76,25 +78,26 @@ Phase 3 文档工作树的新测试结果。
 | Phase 3 CP5 `scripts/check.zsh` | 通过；252 项 pytest，6.46s，89% coverage | Ruff、91 文件 format、Django check、migration drift 和完整 PostgreSQL 回归全部通过。 |
 | Phase 3 CP6 重点 PostgreSQL 测试 | 38 项通过，1.45s | 覆盖 reconciliation、上传 saga 安全复核及 7 项真实并发；并发文件另连续三轮通过（0.91s / 0.90s / 0.92s）。 |
 | Phase 3 CP6 `scripts/check.zsh` | 通过；276 项 pytest，8.04s，88% coverage | Ruff、97 文件 format、Django check、migration drift 和完整 PostgreSQL 回归全部通过。 |
+| Phase 3 CP7 定向 PostgreSQL 测试 | 21 项通过，1.12s | 覆盖完整档案页面、六类真实结构样本、SHA256、权限/IDOR、项目状态、回收站和 CSRF。 |
+| Phase 3 CP7 `scripts/check.zsh` | 通过；297 项 pytest，9.28s，88% coverage | Ruff、99 文件 format、Django check、migration drift 和完整 PostgreSQL 回归全部通过。 |
 | Phase 1 / Phase 2 `scripts/check.zsh` | 通过 | 已收口历史证据；项目专属 `labarchive` Conda 环境、PostgreSQL 测试数据库；Ruff、格式、Django check、migration drift、pytest 和 coverage 全部通过。 |
 | Phase 1 / Phase 2 完整 pytest | 132 项通过，3.65s | 已收口历史证据；PR #2 最终 review 时在整合树复跑。 |
 | Phase 1 / Phase 2 覆盖率 | 88% | 已收口历史证据；1715 statements、398 branches。 |
-| Ruff format / check | `ruff check .` 通过；90 个 Python 文件 format check 通过 | 当前 Phase 3 CP4 完整结果。 |
+| Ruff format / check | `ruff check .` 通过；99 个 Python 文件 format check 通过 | 当前 Phase 3 CP7 完整结果。 |
 | Django system check | 0 issues | 当前整合树通过。 |
 | migration drift | `No changes detected` | 当前模型与 migration 一致。 |
-| 本机 migration | `audit.0003 [X]`、`documents.0001 [X]` | 迁移前 custom-format 快照已创建并由 `pg_restore -l` 校验；迁移应用和 `No changes detected` 复核通过。 |
+| 本机 migration | `audit.0001–0004 [X]`、`documents.0001 [X]` | CP6 迁移前 custom-format 快照已由 `pg_restore -l` 校验；迁移应用和 `No changes detected` 复核通过；CP7 无模型变化。 |
 | 真实事务并发 | 5 项连续三轮通过（0.87s / 0.79s / 0.78s） | 覆盖离组/直接授权、离组/审批、PI 转移/旧 PI 离组、移除/撤销、移除/到期；没有死锁或授权复活。 |
 | 页面安全定向 pytest | 34 项通过，0.96s | 覆盖 SYSTEM_ADMIN 非 LAB_MEMBER、普通非门户 403、IDOR、软删除、CSRF、失败回显、INTERNAL 成员信息边界和只读 Admin。 |
-| UI / 浏览器流程 | 通过 | 实际登录并覆盖申请、失败回显、批准、撤销、INTERNAL 信息边界、SYSTEM_ADMIN 全局 CRUD/软删除、非门户 403；桌面与 390px 移动视口正常，控制台 0 warning/error；临时数据已清理。 |
+| UI / 浏览器流程 | 通过 | Phase 2 多角色流程已通过；CP7 另在隔离 PostgreSQL testserver 实际登录、进入档案、上传/下载真实 PDF，验证 1280px 与 390px、局部表格滚动和控制台 0 warning/error；临时库/文件已清理。 |
 | `git diff --check` | 通过 | 最终文档更新后复核通过。 |
 | GitHub Actions | PR #1 head `31371151159`、PR #2 head `32256185247`、Phase 1 merge main `32257435132`、Phase 2 merge main `32257797190`、最新 main `32258148559` 均通过 | Phase 1 / Phase 2 及 main 收口远端证据；Phase 3 分支尚无 CI。 |
 
 ### 1.6 下一步执行顺序
 
-1. 进入 CP7，实现项目档案列表、上传、下载、软删除、回收站和恢复页面；所有 POST 复用既有服务并覆盖 CSRF、IDOR、账号/项目状态和权限矩阵。
-2. 使用真实 PDF、DOCX、XLSX、PNG/JPEG、ZIP 样本完成联合上传/下载/SHA256/删除恢复验收，并覆盖非法类型、缺失、隔离和篡改安全失败。
-3. 完成 Phase 3 报告、README、ADR/ARCHITECTURE/DATABASE/taskline 收口，运行最终定向、全量、coverage、migration、浏览器（环境可用时）和 `scripts/check.zsh` 门禁；停止在 Phase 3，不进入 Phase 4。
-4. 部署阶段仍需配置外部 `expire_project_access` 调度；本地即时失效与人工命令不替代生产调度。
+1. 当前没有继续开发步骤；Phase 3 已在本地范围收口并停止，不创建 Phase 4 模型、附件或业务页面。
+2. 如需交付 Phase 3，下一独立任务应先复核 clean tree，再明确执行 push、PR、远端 CI 与评审；未执行前不得写为完成。
+3. 部署阶段仍需配置外部 `expire_project_access` 调度和真实恶意软件扫描器；本地门禁不替代生产调度、扫描、Nginx 或恢复演练。
 
 ### 1.7 Phase 3 当前 checkpoint
 
@@ -114,7 +117,7 @@ Phase 3 文档工作树的新测试结果。
   转换、下载审计和 INTERNAL / RESTRICTED / VIEWER / SYSTEM_ADMIN / 无权限 / UUID IDOR 真实字节验收。
 - CP5：**完成并完成 PostgreSQL 验证**；实现权限对称的文档软删除、回收站查询和安全恢复，保留物理字节；恢复重新校验大小、SHA256、真实类型、扫描、权限和版本冲突，缺失/完整性失败转 MISSING，安全失败转 QUARANTINED，并写成功/失败审计。
 - CP6：**完成并完成 PostgreSQL 验证**；实现可配置 TTL、稳定 task ID、TEMPORARY 恢复、AVAILABLE/MISSING 全量复核、MISSING 安全恢复、orphan 最终文件只报告、staging 原子移出/审计失败补偿/清理、管理命令和 production scanner fail-closed；补上传 token、上传/删除/恢复与归档/禁用及并发 reconciliation 回归。
-- CP7：**尚未开始**；档案页面、真实多格式样本、浏览器验收和 Phase 3 最终文档尚未完成。
+- CP7：**实现、本地验证与最终 docs checkpoint 均完成**；档案页面、真实多格式样本、权限/IDOR/CSRF、隔离浏览器和 Phase 3 报告均已完成；docs commit=`f866877`。
 - CP0 验证：`git diff --check`、Markdown fence、ADR 相对链接和当前状态关键词检查通过。
 - CP1 验证：32 项定向测试通过；完整门禁为 Ruff、79 文件 format、Django check、migration drift、
   164 项 PostgreSQL pytest（4.09s）和 88% coverage 全部通过；本机迁移已应用。
@@ -126,12 +129,17 @@ Phase 3 文档工作树的新测试结果。
   migration drift、239 项 PostgreSQL pytest（5.66s）和 89% coverage 全部通过。
 - CP5 验证：13 项定向 PostgreSQL 测试通过；完整门禁为 Ruff、91 文件 format、Django check、migration drift、252 项 PostgreSQL pytest（6.46s）和 89% coverage 全部通过；没有 model 变化或新 migration。
 - CP6 验证：38 项重点 PostgreSQL 测试通过；7 项并发测试连续三轮通过；完整门禁为 Ruff、97 文件 format、Django check、migration drift、276 项 PostgreSQL pytest（8.04s）和 88% coverage 全部通过；本机 `audit.0004` 已应用。
+- CP7 验证：21 项定向 PostgreSQL 页面/真实格式测试通过；最终完整门禁为 Ruff、99 文件 format、Django check、migration drift、297 项 PostgreSQL pytest（9.28s）和 88% coverage；隔离浏览器上传/下载、桌面/移动和控制台检查通过。
 
 ## 2. 当前 Phase 工作区详情
 
 ### 2.1 已完成并验证
 
-这里的“完成并验证”表示 Phase 2 可独立实现范围已有本地实现、验收及实现 commit 远端 CI 证据；不表示真实文件下载联合权限验收、PR 评审或后续 Phase 已完成。
+这里区分 Phase 2 的既有远端证据与 Phase 3 的当前本地证据。Phase 3 的“完成并验证”只表示本地实现、PostgreSQL 自动化与浏览器验收，不表示 push、PR、远端 CI 或部署完成。
+
+- Phase 3 CP0–CP7 已完成本地实现与验收；当前完整门禁 297 项通过、coverage 88%。
+- 六类真实结构样本、鉴权下载、软删除/安全恢复、reconciliation、真实并发与完整档案页面已闭环。
+- Phase 3 报告、README、ADR、ARCHITECTURE 和 DATABASE 已收口并提交为 `f866877`；最终树门禁见顶部状态。
 
 - 已建立 Phase 2 的 PostgreSQL 自动化测试基础；当前工作树综合门禁 132 项通过、覆盖率 88%，包含 Phase 1 回归及现有全部 Phase 2 自动化用例。
 - 已验证现有权限函数不会因为 `REIMBURSEMENT_ADMIN` 系统角色而自动授予 RESTRICTED 项目访问权。
@@ -169,12 +177,13 @@ Phase 3 文档工作树的新测试结果。
 - 当前详情页只展示活动或已批准的申请，不提供完整拒绝/撤销/到期历史时间线；历史保留在数据库和审计中，完整业务历史 UI 可作为后续增强。
 - 移除、撤销和软删除均为 CSRF 保护的 POST 操作，但当前没有额外确认页；`Line.md` 只强制永久删除二次确认，Phase 2 不提供永久删除，因此该项不是本地验收阻塞。
 - 账号永久终止保留其系统 Group；受支持状态机禁止终态恢复。任何未来的恢复或角色清理政策必须另行设计和审计。
-- 项目文件与报销附件模型尚不存在；Phase 2 可以验证用户是否具有项目档案读取资格及统一的项目级权限决策，不能宣称真实文件或附件下载链路已验收。
+- 项目文件模型和下载链路已在 Phase 3 本地验收；报销附件模型仍不存在，不能宣称 Phase 4 附件权限已验收。
 
 ### 2.4 尚未执行
 
-- Phase 3 文件档案系统及真实下载鉴权；
 - Phase 4 报销业务和附件联合权限；
+- Phase 3 push、PR、远端 CI 与评审；
+- 真实生产恶意软件扫描器、Nginx 受控传输和服务器文件权限验证；
 - 生产环境外部到期调度器配置与执行验证；
 - Docker、第二套全新环境和服务器恢复演练。
 
@@ -197,7 +206,7 @@ Phase 3 文档工作树的新测试结果。
 ### 2.7 当前新增 / 修改的重要文件
 
 Phase 3 CP0 commit `b079cb6`、CP1 commit `ccf191f`、CP2 commit `69a0055`、CP3 commit `b4038fa`、
-CP4 commit `432f753`、CP5 commit `9050e6c` 与 CP6 commit `e4a937a`：
+CP4 commit `432f753`、CP5 commit `9050e6c`、CP6 commit `e4a937a`、CP7 commit `3ca19ec` 与最终报告 commit `f866877`：
 
 - `README.md`
 - `taskline.md`
@@ -292,23 +301,49 @@ Phase 2 实现 commit `5c68b403` 中新增：
 - 本机开发库已应用 `audit.0002` 与 `projects.0001`。迁移前快照为 `.local/backups/pre-phase2-20260812-migration.dump`，SHA-256 为 `30d9469b5183cbbc7ad92c4e389f704b3a8237fe4155ba9afe9fbcdf3f9f8b8e`，已由 `pg_restore -l` 校验；
 - Phase 3 本机开发库已应用 `audit.0003` 与 `documents.0001`。迁移前快照为 `.local/backups/pre-phase3-cp1-20260819.dump`，SHA-256 为 `84032884b4938045cecdc1dad97cbc6d919458416350af41bf4877738e624b55`，已由 `pg_restore -l` 校验；
 - CP6 本机开发库已应用 `audit.0004`。迁移前快照为 `.local/backups/pre-phase3-cp6-20260820.dump`，SHA-256 为 `19b50cc27a9fde3857d84e7b8f7751af4fef559e4d40a1b7d7284e8a08ee9cdf`，已由 `pg_restore -l` 校验；
-- 当前分支为 `agent/phase-3-files`，CP0 commit 为 `b079cb6`，CP1 commit 为 `ccf191f`，CP2 commit 为 `69a0055`，CP3 commit 为 `b4038fa`，CP4 commit 为 `432f753`，CP5 commit 为 `9050e6c`，CP6 commit 为 `e4a937a`，基线为 `main` / `origin/main` 的 `a203107`；Phase 1 head `119e209`、Phase 2 head `1bef3ce` 及对应实现提交均已成为 `origin/main` 祖先；
+- 当前分支为 `agent/phase-3-files`，CP0–CP7 实现 commit 依次包含 `b079cb6`、`ccf191f`、`69a0055`、`b4038fa`、`432f753`、`9050e6c`、`e4a937a`、`3ca19ec`，最终报告 commit 为 `f866877`，基线为 `main` / `origin/main` 的 `a203107`；Phase 1 head `119e209`、Phase 2 head `1bef3ce` 及对应实现提交均已成为 `origin/main` 祖先；
 - [PR #1](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/1) 已合并，merge commit=`ad3181c`；[PR #2](https://github.com/ACM-player/Document_filing_reimbursemment_system/pull/2) 已在 base 从 `agent/phase-1-auth` 调整为 `main` 后合并，merge commit=`0fccbb8`；
 - PR #2 整理未 rebase、未 squash；Phase 1 merge commit 保留了 `119e209` 祖先关系，retarget 后三点 diff 仍仅包含原 46 个 Phase 2 文件；
-- Phase 3 CP4 已完成；鉴权 Download 和物理文件下载完整性/权限联合验收已闭环，删除/恢复仍待后续 Phase 3 checkpoint。
+- Phase 3 CP0–CP7 已完成本地实现与验收；分支尚未推送，无 Phase 3 PR / CI。
 
 ## 3. 未闭环的跨 Phase 事项
 
 - Phase 1 → Phase 2：**项目级联动已本地完成**。真实 Project、Membership 和访问申请上的 INTERNAL / RESTRICTED 项目元数据与授权决策已进入 132 项综合回归和浏览器流程；该结论不包含真实文件下载。
 - Phase 1 / Phase 3 / Phase 4：**项目档案真实文件联合权限已在 Phase 3 CP4 本地完成**；报销管理员不会因为系统角色获得 RESTRICTED 项目档案读取资格，报销附件模型与联合权限待 Phase 4。
 - Phase 0 / 后续交付：Docker 路径和第二套完整环境仍未验证，不能用本机 Conda 路径代替该验收。
-- Phase 2 → Phase 3：真实文件上传与鉴权下载已本地完成，并以真实字节复核 INTERNAL、RESTRICTED、VIEWER、SYSTEM_ADMIN、无权限用户及直接 URL / IDOR 边界。软删除/恢复、完整档案 UI、配额及版本管理仍按后续 Phase 3 checkpoint 推进，不能据此声明整个 Phase 3 已完成。
+- Phase 2 → Phase 3：**本地联合验收完成**。真实 Document/FileAsset、上传、鉴权下载、软删除/安全恢复、完整档案 UI 和直接 URL / IDOR 已覆盖；版本替换按 ADR-0006 明确保留到 V2，不是 Phase 3 未完成项。
 - Phase 4：报销业务和附件联合权限尚未开始。
 - MFA：管理员 MFA 按 `Line.md` 计划在远程部署前闭环，本地 Phase 2 不提前实现。
 - 反向代理真实来源 IP：依赖服务器和代理拓扑，保留到部署阶段验证。
 - 服务器部署、TLS、生产配置、备份与恢复演练：当前明确延后，不属于本地 Phase 2 完成条件。
 
 ## 4. 工作历史
+
+### 2026-08-20 — Phase 3 CP7：档案页面、真实样本与最终本地验收
+
+- 状态：**CP7 实现、本地验证和 Phase 3 最终 docs checkpoint 已完成；Phase 4 未开始。**
+- 分支：`agent/phase-3-files`，父 checkpoint `251eef4`；
+- 提交 / PR：`3ca19ec feat(documents): complete project archive pages`；分支尚未推送，无 Phase 3 PR / CI。
+
+#### 完成内容
+
+- 新增项目档案列表、上传、鉴权下载、软删除、项目级分类创建、回收站和恢复页面，接入项目详情及全局导航；
+- 页面先检查项目门户资格再解析 UUID，写端点使用 POST/CSRF，并复用既有事务服务、锁后鉴权和安全失败语义；
+- 表单按当前项目过滤启用的全局/项目分类，token 重放保持幂等；归档项目只读，软删除项目不进入正常页面；
+- 新增 21 项 PostgreSQL 页面测试，覆盖 PDF、DOCX、XLSX、PNG、JPEG、ZIP 上传/下载/SHA256、权限矩阵、IDOR、回收站、项目状态和 CSRF；
+- 使用隔离 Django testserver、独立 PostgreSQL `test_labarchive` 和 `/private/tmp` 媒体根完成真实浏览器 PDF 上传/下载、1280px/390px 和控制台验收；临时库与文件已精确清理，开发库未写入验收业务数据；
+- 新增 `docs/PHASE3_REPORT.md`，同步 README、ADR、ARCHITECTURE、DATABASE 和 taskline，明确本地完成与远端/部署未验证边界。
+
+#### 验证结果
+
+- CP7 定向 PostgreSQL 测试：21 项通过，1.12s；
+- 最终 `scripts/check.zsh`：Ruff、99 文件 format、Django check、migration drift、297 项 PostgreSQL pytest（9.28s）和 88% coverage 全部通过；
+- 浏览器：真实 PDF 上传和受控下载 200/80 bytes；390px `bodyScrollWidth == innerWidth`，1280px 正常，控制台 0 warning/error；
+- `git diff --check`：通过；CP7 无模型变化或新 migration。
+
+#### 下一步
+
+Phase 3 最终文档已提交为 `f866877 docs: close phase three local acceptance`，当前停止且不进入 Phase 4。Phase 3 push、PR 和远端 CI 仍是未执行的独立交付状态，只能在新的明确交付任务中处理。
 
 ### 2026-08-20 — Phase 3 CP6：reconciliation、故障补偿与真实并发
 
