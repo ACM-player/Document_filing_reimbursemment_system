@@ -175,7 +175,8 @@ ZIP 检查在内存和磁盘上均不展开成员，但会受限流式读取每�
 `CLEAN` 才允许后续服务发布。
 
 上传服务使用持久化 TEMPORARY 意图和全局唯一 token；发布前后均按规范锁序重新鉴权、复核最终文件
-大小与 SHA256，并在失败时保留可解释状态。下载只经鉴权 endpoint 打开受控文件。软删除保留物理字节，
+大小与 SHA256，并在失败时保留可解释状态。下载只经鉴权 endpoint 打开受控文件，并在返回前对同一文件
+句柄复核大小与 SHA256；同大小篡改也会安全转为 MISSING。软删除保留物理字节，
 恢复会重新验证存在性、大小、SHA256、真实类型、扫描策略、权限和当前版本冲突。reconciliation 使用稳定
 task UUID 处理 stale TEMPORARY、AVAILABLE/MISSING 修复和可补偿 staging 清理；未知最终 orphan 只报告，
 不自动删除。production 未配置真实扫描器时，任何可能改变文件状态的 reconciliation 在开始前 fail closed。

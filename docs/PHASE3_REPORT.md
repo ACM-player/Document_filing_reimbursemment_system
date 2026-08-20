@@ -31,6 +31,8 @@ Phase 3 新上传仍固定为独立 document group、`version=1`、`is_current=t
 - ARCHIVED 项目只读，soft-deleted 项目拒绝全部文件访问；非门户账号在 UUID 解析前返回 403；
 - 所有页面写入口为 CSRF 保护的 POST；服务在事务锁后再次鉴权，页面过滤不作为安全边界；
 - 上传、下载、隔离、缺失、软删除、恢复与 reconciliation 均写 append-only 审计。
+- 每次下载在返回前对已安全打开的同一文件句柄复核大小和 SHA256；同大小篡改也会转为 MISSING，
+  不产生成功下载响应。
 
 ## 3. 文件与数据库一致性
 

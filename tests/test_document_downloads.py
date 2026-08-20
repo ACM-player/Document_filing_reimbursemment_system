@@ -125,6 +125,28 @@ def test_size_anomaly_rehashes_then_marks_integrity_failure(download_context):
     assert integrity_audit.new_value["file_size"] == len(PDF_BYTES) + len(b"tampered")
 
 
+def test_same_size_tamper_is_never_served_and_marks_integrity_failure(download_context):
+    actor, _, document, storage = download_context
+    tampered = PDF_BYTES.replace(b"evidence", b"tampered")
+    assert len(tampered) == len(PDF_BYTES)
+    storage.resolve_final(document.file_asset.relative_path).write_bytes(tampered)
+
+    with pytest.raises(DocumentDownloadError) as exc_info:
+        prepare_document_download(actor=actor, document_id=document.pk, storage=storage)
+
+    assert exc_info.value.code == "integrity_failed"
+    asset = FileAsset.objects.get(pk=document.file_asset_id)
+    assert asset.storage_status == FileStorageStatus.MISSING
+    integrity_audit = AuditLog.objects.get(action=AuditAction.FILE_INTEGRITY_FAILED)
+    assert integrity_audit.old_value["sha256"] == document.file_asset.sha256
+    assert integrity_audit.new_value["file_size"] == len(PDF_BYTES)
+    assert integrity_audit.new_value["sha256"] != document.file_asset.sha256
+    assert not AuditLog.objects.filter(
+        action=AuditAction.FILE_DOWNLOADED,
+        result="SUCCESS",
+    ).exists()
+
+
 def test_symlinked_final_file_is_never_served(download_context, tmp_path):
     actor, _, document, storage = download_context
     final_path = storage.resolve_final(document.file_asset.relative_path)

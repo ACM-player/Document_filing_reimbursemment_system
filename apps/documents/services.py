@@ -907,9 +907,8 @@ def _prepare_document_download(
         )
 
     actual_size = file_object.seek(0, 2)
-    file_object.seek(0)
-    if actual_size != asset.file_size:
-        actual_sha256 = _sha256_from_open_file(file_object)
+    actual_sha256 = _sha256_from_open_file(file_object)
+    if actual_size != asset.file_size or actual_sha256 != asset.sha256:
         file_object.close()
         asset.storage_status = FileStorageStatus.MISSING
         asset.status_reason = "file_metadata_mismatch"
@@ -919,7 +918,7 @@ def _prepare_document_download(
             request=http_request,
             actor=locked_actor,
             subject=document,
-            description="下载前文件大小异常并完成 SHA256 复核",
+            description="下载前文件大小或 SHA256 异常",
             old_value={"file_size": asset.file_size, "sha256": asset.sha256},
             new_value={"file_size": actual_size, "sha256": actual_sha256},
             result=AuditResult.FAILED,
